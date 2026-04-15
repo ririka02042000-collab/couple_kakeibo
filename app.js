@@ -266,6 +266,43 @@ function renderSettle() {
       <div class="bd-amount ${jDep-jWit-jExp>=0?'positive':'negative'}">${jDep-jWit-jExp>=0?'+':''}${fmt(jDep-jWit-jExp)}</div>
     </div>
   `;
+
+  // ── 全期間の内訳（未回収/払いすぎのみ）──────────────
+  const allTx = transactions;
+  const allGfExp  = allTx.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const allBfExp  = allTx.filter(t=>t.payer==='boyfriend' &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const allTotal  = allGfExp + allBfExp;
+  const allGfShouldPay = allTotal * (gfR / ratioTotal);
+  const allBfShouldPay = allTotal * (bfR / ratioTotal);
+  const allBfToGf = allTx.filter(t=>t.type==='transfer'&&t.payer==='boyfriend' &&t.transferTo==='girlfriend').reduce((s,t)=>s+t.amount,0);
+  const allGfToBf = allTx.filter(t=>t.type==='transfer'&&t.payer==='girlfriend'&&t.transferTo==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
+  const allNetBfToGf = allBfToGf - allGfToBf;
+  const allGfDiff = (allGfExp - allGfShouldPay) - allNetBfToGf;
+  const allBfDiff = (allBfExp - allBfShouldPay) + allNetBfToGf;
+
+  const bdAllEl = document.getElementById('breakdown-list-all');
+  bdAllEl.innerHTML = `
+    <div class="breakdown-item">
+      <div class="bd-avatar">👩</div>
+      <div class="bd-info">
+        <div class="bd-name">${settings.gfName}</div>
+      </div>
+      <div class="bd-amount ${allGfDiff>=0?'positive':'negative'}">
+        ${allGfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(allGfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${allGfDiff>=0?'未回収':'支払済超過'}</div>
+      </div>
+    </div>
+    <div class="breakdown-item">
+      <div class="bd-avatar">👨</div>
+      <div class="bd-info">
+        <div class="bd-name">${settings.bfName}</div>
+      </div>
+      <div class="bd-amount ${-allBfDiff>=0?'positive':'negative'}">
+        ${-allBfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(allBfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${-allBfDiff>=0?'払いすぎ':'不足'}</div>
+      </div>
+    </div>
+  `;
 }
 
 // ── 全体再描画 ────────────────────────────────────
