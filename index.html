@@ -3,39 +3,81 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>家計簿アプリ</title>
+  <title>ふたり家計簿</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h1>家計簿アプリ</h1>
 
-    <!-- 残高表示 -->
-    <div class="balance-card">
-      <p class="balance-label">現在の残高</p>
-      <p class="balance-amount" id="balance">¥0</p>
-      <div class="summary">
-        <div class="summary-item income">
-          <span>収入</span>
-          <span id="total-income">¥0</span>
+  <!-- ヘッダー -->
+  <header class="app-header">
+    <h1>💑 ふたり家計簿</h1>
+    <button class="settings-btn" id="settings-btn">⚙️</button>
+  </header>
+
+  <!-- タブ -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="home">ホーム</button>
+    <button class="tab-btn" data-tab="history">履歴</button>
+    <button class="tab-btn" data-tab="settle">精算</button>
+  </nav>
+
+  <!-- ホームタブ -->
+  <div class="tab-content active" id="tab-home">
+
+    <!-- 月選択 -->
+    <div class="month-nav">
+      <button id="prev-month">‹</button>
+      <span id="current-month-label"></span>
+      <button id="next-month">›</button>
+    </div>
+
+    <!-- 残高カード -->
+    <div class="balance-section">
+      <div class="person-card girlfriend">
+        <div class="person-avatar">👩</div>
+        <div class="person-name" id="name-girlfriend-display">彼女</div>
+        <div class="person-amount" id="gf-amount">¥0</div>
+        <div class="person-label">支出</div>
+      </div>
+      <div class="joint-card">
+        <div class="joint-icon">🏦</div>
+        <div class="joint-label">共同貯金</div>
+        <div class="joint-balance" id="joint-balance">¥0</div>
+        <div class="joint-sub">
+          <span>入金 <b id="joint-in">¥0</b></span>
+          <span>出金 <b id="joint-out">¥0</b></span>
         </div>
-        <div class="divider"></div>
-        <div class="summary-item expense">
-          <span>支出</span>
-          <span id="total-expense">¥0</span>
-        </div>
+      </div>
+      <div class="person-card boyfriend">
+        <div class="person-avatar">👨</div>
+        <div class="person-name" id="name-boyfriend-display">彼氏</div>
+        <div class="person-amount" id="bf-amount">¥0</div>
+        <div class="person-label">支出</div>
       </div>
     </div>
 
-    <!-- フィルター -->
+    <!-- カテゴリ別集計 -->
+    <div class="section-title">カテゴリ別支出</div>
+    <div class="category-chart" id="category-chart"></div>
+
+    <!-- 最近の取引 -->
+    <div class="section-title">最近の取引</div>
+    <div class="transaction-list" id="home-tx-list">
+      <p class="empty-msg">取引がありません</p>
+    </div>
+  </div>
+
+  <!-- 履歴タブ -->
+  <div class="tab-content" id="tab-history">
     <div class="filter-bar">
-      <select id="filter-month">
-        <option value="">すべての月</option>
+      <select id="filter-payer">
+        <option value="">全員</option>
+        <option value="girlfriend">彼女</option>
+        <option value="boyfriend">彼氏</option>
+        <option value="joint">共同貯金</option>
       </select>
       <select id="filter-category">
-        <option value="">すべてのカテゴリ</option>
-        <option value="給与">給与</option>
-        <option value="副収入">副収入</option>
+        <option value="">全カテゴリ</option>
         <option value="食費">食費</option>
         <option value="住居費">住居費</option>
         <option value="交通費">交通費</option>
@@ -44,40 +86,72 @@
         <option value="医療費">医療費</option>
         <option value="娯楽費">娯楽費</option>
         <option value="衣類">衣類</option>
+        <option value="外食">外食</option>
+        <option value="旅行">旅行</option>
         <option value="その他">その他</option>
       </select>
       <select id="filter-type">
-        <option value="">すべて</option>
-        <option value="income">収入のみ</option>
-        <option value="expense">支出のみ</option>
+        <option value="">収入/支出</option>
+        <option value="expense">支出</option>
+        <option value="income">収入</option>
+        <option value="deposit">貯金入金</option>
+        <option value="withdraw">貯金出金</option>
       </select>
     </div>
-
-    <!-- 取引一覧 -->
-    <div class="transaction-list" id="transaction-list">
-      <p class="empty-msg" id="empty-msg">取引がありません</p>
+    <div class="transaction-list" id="history-tx-list">
+      <p class="empty-msg">取引がありません</p>
     </div>
-
-    <!-- 追加ボタン -->
-    <button class="add-btn" id="add-btn">＋ 取引を追加</button>
   </div>
 
-  <!-- モーダル -->
+  <!-- 精算タブ -->
+  <div class="tab-content" id="tab-settle">
+    <div class="settle-card">
+      <div class="settle-icon" id="settle-icon">⚖️</div>
+      <p class="settle-desc" id="settle-desc">精算の必要はありません</p>
+      <p class="settle-amount" id="settle-amount"></p>
+    </div>
+    <div class="section-title">今月の内訳</div>
+    <div class="breakdown-list" id="breakdown-list"></div>
+  </div>
+
+  <!-- 追加ボタン -->
+  <button class="add-btn" id="add-btn">＋ 追加</button>
+
+  <!-- 取引追加モーダル -->
   <div class="modal-overlay" id="modal-overlay">
     <div class="modal">
-      <h2 id="modal-title">取引を追加</h2>
+      <div class="modal-handle"></div>
+      <h2>取引を追加</h2>
 
+      <!-- 種別 -->
       <div class="type-toggle">
-        <button class="type-btn active" id="btn-expense" data-type="expense">支出</button>
-        <button class="type-btn" id="btn-income" data-type="income">収入</button>
+        <button class="type-btn active" data-type="expense">支出</button>
+        <button class="type-btn" data-type="income">収入</button>
+        <button class="type-btn" data-type="deposit">貯金入金</button>
+        <button class="type-btn" data-type="withdraw">貯金出金</button>
+      </div>
+
+      <!-- 支出元（収入/支出のみ表示） -->
+      <div class="form-group" id="payer-group">
+        <label>支出元</label>
+        <div class="payer-toggle">
+          <button class="payer-btn active" data-payer="girlfriend">
+            <span class="payer-avatar">👩</span>
+            <span class="payer-name" id="payer-gf-label">彼女</span>
+          </button>
+          <button class="payer-btn" data-payer="boyfriend">
+            <span class="payer-avatar">👨</span>
+            <span class="payer-name" id="payer-bf-label">彼氏</span>
+          </button>
+        </div>
       </div>
 
       <div class="form-group">
         <label>金額 (円)</label>
-        <input type="number" id="input-amount" placeholder="0" min="1">
+        <input type="number" id="input-amount" placeholder="0" min="1" inputmode="numeric">
       </div>
 
-      <div class="form-group">
+      <div class="form-group" id="category-group">
         <label>カテゴリ</label>
         <select id="input-category">
           <option value="食費">食費</option>
@@ -88,15 +162,16 @@
           <option value="医療費">医療費</option>
           <option value="娯楽費">娯楽費</option>
           <option value="衣類">衣類</option>
+          <option value="外食">外食</option>
+          <option value="旅行">旅行</option>
           <option value="給与">給与</option>
-          <option value="副収入">副収入</option>
           <option value="その他">その他</option>
         </select>
       </div>
 
       <div class="form-group">
         <label>メモ</label>
-        <input type="text" id="input-note" placeholder="メモ（任意）">
+        <input type="text" id="input-note" placeholder="（任意）">
       </div>
 
       <div class="form-group">
@@ -107,6 +182,26 @@
       <div class="modal-actions">
         <button class="btn-cancel" id="btn-cancel">キャンセル</button>
         <button class="btn-save" id="btn-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 設定モーダル -->
+  <div class="modal-overlay" id="settings-overlay">
+    <div class="modal">
+      <div class="modal-handle"></div>
+      <h2>設定</h2>
+      <div class="form-group">
+        <label>👩 彼女の名前</label>
+        <input type="text" id="setting-gf-name" placeholder="彼女">
+      </div>
+      <div class="form-group">
+        <label>👨 彼氏の名前</label>
+        <input type="text" id="setting-bf-name" placeholder="彼氏">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-cancel" id="settings-cancel">キャンセル</button>
+        <button class="btn-save" id="settings-save">保存</button>
       </div>
     </div>
   </div>
