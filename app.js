@@ -82,16 +82,18 @@ function renderHome() {
   const bfExp = txs.filter(t => t.payer === 'boyfriend'  && t.type === 'expense')
                     .reduce((s,t) => s+t.amount, 0);
   // 共同貯金残高（全期間）
-  // 入金: 旧depositデータ + 振替→joint
-  const jointIn  = transactions.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
-  const jointOut = transactions.filter(t => t.type === 'transfer' && t.payer === 'joint').reduce((s,t)=>s+t.amount,0)
-                 + transactions.filter(t => t.payer === 'joint' && t.type === 'expense').reduce((s,t)=>s+t.amount,0);
+  // 共同貯金 残額（全期間）
+  const allJointIn  = transactions.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
+  const allJointOut = transactions.filter(t => (t.type === 'transfer' && t.payer === 'joint') || (t.payer === 'joint' && t.type === 'expense')).reduce((s,t)=>s+t.amount,0);
+  // その月の支出・入金
+  const monthJointExp = txs.filter(t => t.payer === 'joint' && t.type === 'expense').reduce((s,t)=>s+t.amount,0);
+  const monthJointIn  = txs.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
 
-  document.getElementById('gf-amount').textContent = fmt(gfExp);
-  document.getElementById('bf-amount').textContent = fmt(bfExp);
-  document.getElementById('joint-balance').textContent = fmt(jointIn - jointOut);
-  document.getElementById('joint-in').textContent  = fmt(jointIn);
-  document.getElementById('joint-out').textContent = fmt(jointOut);
+  document.getElementById('gf-amount').textContent      = fmt(gfExp);
+  document.getElementById('bf-amount').textContent      = fmt(bfExp);
+  document.getElementById('joint-balance').textContent  = fmt(allJointIn - allJointOut);
+  document.getElementById('joint-expense').textContent  = fmt(monthJointExp);
+  document.getElementById('joint-in').textContent       = fmt(monthJointIn);
 
   // カテゴリ集計（支出のみ）
   const expTxs = txs.filter(t => t.type === 'expense');
