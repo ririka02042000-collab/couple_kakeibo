@@ -423,7 +423,8 @@ body {
   gap: 10px;
 }
 
-.payer-btn {
+.payer-btn,
+.transfer-to-btn {
   flex: 1;
   display: flex;
   flex-direction: column;
