@@ -312,6 +312,11 @@ body {
 .bd-amount.positive { color: var(--income); }
 .bd-amount.negative { color: var(--expense); }
 
+.ratio-info-item {
+  background: var(--joint-light);
+  border-left: 3px solid var(--joint);
+}
+
 /* 追加ボタン */
 .add-btn {
   position: fixed;
@@ -464,6 +469,41 @@ body {
 
 .form-group input:focus,
 .form-group select:focus { border-color: var(--joint); }
+
+/* 割合入力 */
+.ratio-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ratio-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.ratio-person {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+}
+
+.ratio-colon {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--muted);
+  padding-top: 18px;
+}
+
+.ratio-hint {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.4;
+}
 
 /* モーダルアクション */
 .modal-actions {

@@ -199,6 +199,21 @@
         <label>👨 彼氏の名前</label>
         <input type="text" id="setting-bf-name" placeholder="彼氏">
       </div>
+      <div class="form-group">
+        <label>💰 支払い割合（月の負担額）</label>
+        <div class="ratio-row">
+          <div class="ratio-item">
+            <span class="ratio-person" id="ratio-gf-label">彼女</span>
+            <input type="number" id="setting-gf-ratio" placeholder="10000" min="0" inputmode="numeric">
+          </div>
+          <span class="ratio-colon">：</span>
+          <div class="ratio-item">
+            <span class="ratio-person" id="ratio-bf-label">彼氏</span>
+            <input type="number" id="setting-bf-ratio" placeholder="10000" min="0" inputmode="numeric">
+          </div>
+        </div>
+        <p class="ratio-hint">例）彼氏12000・彼女10000の場合、合計支出を12:10の割合で負担</p>
+      </div>
       <div class="modal-actions">
         <button class="btn-cancel" id="settings-cancel">キャンセル</button>
         <button class="btn-save" id="settings-save">保存</button>

@@ -19,7 +19,7 @@ const TYPE_LABELS = {
 
 // ── 状態 ──────────────────────────────────────────
 let transactions = JSON.parse(localStorage.getItem('couple_kakeibo') || '[]');
-let settings     = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":"彼女","bfName":"彼氏"}');
+let settings     = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":"彼女","bfName":"彼氏","gfRatio":1,"bfRatio":1}');
 let currentType  = 'expense';
 let currentPayer = 'girlfriend';
 let viewMonth    = new Date().toISOString().slice(0, 7); // "YYYY-MM"
@@ -50,6 +50,10 @@ function applyNames() {
   document.getElementById('payer-bf-label').textContent = settings.bfName;
   document.getElementById('setting-gf-name').value = settings.gfName;
   document.getElementById('setting-bf-name').value = settings.bfName;
+  document.getElementById('setting-gf-ratio').value = settings.gfRatio || '';
+  document.getElementById('setting-bf-ratio').value = settings.bfRatio || '';
+  document.getElementById('ratio-gf-label').textContent = settings.gfName;
+  document.getElementById('ratio-bf-label').textContent = settings.bfName;
 
   // フィルターの選択肢も更新
   const opts = document.querySelectorAll('#filter-payer option');
@@ -168,10 +172,20 @@ function renderSettle() {
   const jDep  = txs.filter(t=>t.type==='deposit').reduce((s,t)=>s+t.amount,0);
   const jWit  = txs.filter(t=>t.type==='withdraw').reduce((s,t)=>s+t.amount,0);
 
-  const total   = gfExp + bfExp;
-  const half    = total / 2;
-  const diff    = gfExp - bfExp; // 正: 彼女の方が多く払った
-  const payAmt  = Math.abs(diff) / 2;
+  const total = gfExp + bfExp;
+
+  // 負担割合を計算（設定値をそのまま比率として使用）
+  const gfR = Number(settings.gfRatio) || 1;
+  const bfR = Number(settings.bfRatio) || 1;
+  const ratioTotal = gfR + bfR;
+
+  // 各自の「本来負担すべき金額」
+  const gfShouldPay = total * (gfR / ratioTotal);
+  const bfShouldPay = total * (bfR / ratioTotal);
+
+  // 実際に払った額との差 (正 = 払いすぎ、負 = 払い足りない)
+  const gfDiff = gfExp - gfShouldPay;
+  const bfDiff = bfExp - bfShouldPay;
 
   const iconEl   = document.getElementById('settle-icon');
   const descEl   = document.getElementById('settle-desc');
@@ -181,38 +195,61 @@ function renderSettle() {
     iconEl.textContent   = '⚖️';
     descEl.textContent   = '今月の支出はありません';
     amountEl.textContent = '';
-  } else if (Math.abs(diff) < 10) {
+  } else if (Math.abs(gfDiff) < 10) {
     iconEl.textContent   = '✅';
     descEl.textContent   = '精算の必要はありません！';
     amountEl.textContent = '';
-  } else if (diff > 0) {
+  } else if (gfDiff > 0) {
+    // 彼女が払いすぎ → 彼氏が彼女に払う
     iconEl.textContent   = '💸';
     descEl.textContent   = `${settings.bfName} → ${settings.gfName}`;
-    amountEl.textContent = fmt(payAmt) + ' お支払い';
+    amountEl.textContent = fmt(Math.round(gfDiff)) + ' お支払い';
   } else {
+    // 彼氏が払いすぎ → 彼女が彼氏に払う
     iconEl.textContent   = '💸';
     descEl.textContent   = `${settings.gfName} → ${settings.bfName}`;
-    amountEl.textContent = fmt(payAmt) + ' お支払い';
+    amountEl.textContent = fmt(Math.round(bfDiff)) + ' お支払い';
   }
+
+  // 割合表示テキスト
+  const ratioLabel = (gfR === bfR)
+    ? '（折半）'
+    : `（${settings.gfName} ${gfR} : ${settings.bfName} ${bfR}）`;
 
   // 内訳
   const bdEl = document.getElementById('breakdown-list');
   bdEl.innerHTML = `
+    <div class="breakdown-item ratio-info-item">
+      <div class="bd-avatar">⚖️</div>
+      <div class="bd-info">
+        <div class="bd-name">負担割合 ${ratioLabel}</div>
+        <div class="bd-detail">
+          ${settings.gfName} 本来負担: ${fmt(Math.round(gfShouldPay))} /
+          ${settings.bfName} 本来負担: ${fmt(Math.round(bfShouldPay))}
+        </div>
+      </div>
+    </div>
     <div class="breakdown-item">
       <div class="bd-avatar">👩</div>
       <div class="bd-info">
         <div class="bd-name">${settings.gfName}</div>
-        <div class="bd-detail">収入 ${fmt(gfInc)} / 支出 ${fmt(gfExp)}</div>
+        <div class="bd-detail">実際の支出 ${fmt(gfExp)} / 収入 ${fmt(gfInc)}</div>
       </div>
-      <div class="bd-amount ${gfInc-gfExp>=0?'positive':'negative'}">${gfInc-gfExp>=0?'+':''}${fmt(gfInc-gfExp)}</div>
+      <div class="bd-amount ${gfDiff>=0?'positive':'negative'}">
+        ${gfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(gfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${gfDiff>=0?'払いすぎ':'不足'}</div>
+      </div>
     </div>
     <div class="breakdown-item">
       <div class="bd-avatar">👨</div>
       <div class="bd-info">
         <div class="bd-name">${settings.bfName}</div>
-        <div class="bd-detail">収入 ${fmt(bfInc)} / 支出 ${fmt(bfExp)}</div>
+        <div class="bd-detail">実際の支出 ${fmt(bfExp)} / 収入 ${fmt(bfInc)}</div>
       </div>
-      <div class="bd-amount ${bfInc-bfExp>=0?'positive':'negative'}">${bfInc-bfExp>=0?'+':''}${fmt(bfInc-bfExp)}</div>
+      <div class="bd-amount ${bfDiff>=0?'positive':'negative'}">
+        ${bfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(bfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${bfDiff>=0?'払いすぎ':'不足'}</div>
+      </div>
     </div>
     <div class="breakdown-item">
       <div class="bd-avatar">🏦</div>
@@ -361,8 +398,12 @@ settingsOverlay.addEventListener('click', e => {
 });
 
 document.getElementById('settings-save').addEventListener('click', () => {
-  settings.gfName = document.getElementById('setting-gf-name').value.trim() || '彼女';
-  settings.bfName = document.getElementById('setting-bf-name').value.trim() || '彼氏';
+  settings.gfName  = document.getElementById('setting-gf-name').value.trim() || '彼女';
+  settings.bfName  = document.getElementById('setting-bf-name').value.trim() || '彼氏';
+  const gfR = parseFloat(document.getElementById('setting-gf-ratio').value);
+  const bfR = parseFloat(document.getElementById('setting-bf-ratio').value);
+  settings.gfRatio = (gfR > 0) ? gfR : 1;
+  settings.bfRatio = (bfR > 0) ? bfR : 1;
   save();
   applyNames();
   renderAll();
