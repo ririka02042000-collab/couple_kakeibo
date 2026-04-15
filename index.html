@@ -91,11 +91,10 @@
         <option value="その他">その他</option>
       </select>
       <select id="filter-type">
-        <option value="">収入/支出</option>
+        <option value="">すべて</option>
         <option value="expense">支出</option>
-        <option value="income">収入</option>
         <option value="deposit">貯金入金</option>
-        <option value="withdraw">貯金出金</option>
+        <option value="transfer">振替</option>
       </select>
     </div>
     <div class="transaction-list" id="history-tx-list">
@@ -126,9 +125,8 @@
       <!-- 種別 -->
       <div class="type-toggle">
         <button class="type-btn active" data-type="expense">支出</button>
-        <button class="type-btn" data-type="income">収入</button>
         <button class="type-btn" data-type="deposit">貯金入金</button>
-        <button class="type-btn" data-type="withdraw">貯金出金</button>
+        <button class="type-btn" data-type="transfer">振替</button>
       </div>
 
       <!-- 支出元 -->
@@ -144,6 +142,25 @@
             <span class="payer-name" id="payer-bf-label">彼氏</span>
           </button>
           <button class="payer-btn" data-payer="joint" id="payer-joint-btn">
+            <span class="payer-avatar">🏦</span>
+            <span class="payer-name">共同貯金</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 振替先（振替タイプのみ表示） -->
+      <div class="form-group" id="transfer-to-group" style="display:none">
+        <label>振替先</label>
+        <div class="payer-toggle">
+          <button class="transfer-to-btn" data-to="girlfriend">
+            <span class="payer-avatar">👩</span>
+            <span class="payer-name" id="transfer-to-gf-label">彼女</span>
+          </button>
+          <button class="transfer-to-btn" data-to="boyfriend">
+            <span class="payer-avatar">👨</span>
+            <span class="payer-name" id="transfer-to-bf-label">彼氏</span>
+          </button>
+          <button class="transfer-to-btn" data-to="joint">
             <span class="payer-avatar">🏦</span>
             <span class="payer-name">共同貯金</span>
           </button>

@@ -14,22 +14,22 @@ const PAYER_INFO = {
 };
 
 const TYPE_LABELS = {
-  expense: '支出', income: '収入', deposit: '貯金入金', withdraw: '貯金出金'
+  expense: '支出', deposit: '貯金入金', transfer: '振替'
 };
 
 // ── 状態 ──────────────────────────────────────────
 let transactions = JSON.parse(localStorage.getItem('couple_kakeibo') || '[]');
 let settings     = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":"彼女","bfName":"彼氏","gfRatio":1,"bfRatio":1}');
-let currentType  = 'expense';
-let currentPayer = 'girlfriend';
+let currentType       = 'expense';
+let currentPayer      = 'girlfriend';
+let currentTransferTo = 'boyfriend';
 let viewMonth    = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 
 // ── ユーティリティ ─────────────────────────────────
 const fmt  = n  => '¥' + Math.abs(n).toLocaleString('ja-JP');
 const sign = (type, n) => {
-  if (type === 'income') return '+' + fmt(n);
   if (type === 'deposit') return '+' + fmt(n);
-  if (type === 'withdraw') return '-' + fmt(n);
+  if (type === 'transfer') return fmt(n);
   return '-' + fmt(n);
 };
 const fmtDate = d => {
@@ -52,8 +52,10 @@ function applyNames() {
   document.getElementById('setting-bf-name').value = settings.bfName;
   document.getElementById('setting-gf-ratio').value = settings.gfRatio || '';
   document.getElementById('setting-bf-ratio').value = settings.bfRatio || '';
-  document.getElementById('ratio-gf-label').textContent = settings.gfName;
-  document.getElementById('ratio-bf-label').textContent = settings.bfName;
+  document.getElementById('ratio-gf-label').textContent   = settings.gfName;
+  document.getElementById('ratio-bf-label').textContent   = settings.bfName;
+  document.getElementById('transfer-to-gf-label').textContent = settings.gfName;
+  document.getElementById('transfer-to-bf-label').textContent = settings.bfName;
 
   // フィルターの選択肢も更新
   const opts = document.querySelectorAll('#filter-payer option');
@@ -80,8 +82,10 @@ function renderHome() {
   const bfExp = txs.filter(t => t.payer === 'boyfriend'  && t.type === 'expense')
                     .reduce((s,t) => s+t.amount, 0);
   // 共同貯金残高（全期間）
-  const jointIn  = transactions.filter(t => t.type === 'deposit').reduce((s,t)=>s+t.amount,0);
-  const jointOut = transactions.filter(t => t.type === 'withdraw').reduce((s,t)=>s+t.amount,0);
+  const jointIn  = transactions.filter(t => t.type === 'deposit').reduce((s,t)=>s+t.amount,0)
+                 + transactions.filter(t => t.type === 'transfer' && t.transferTo === 'joint').reduce((s,t)=>s+t.amount,0);
+  const jointOut = transactions.filter(t => t.type === 'transfer' && t.payer === 'joint').reduce((s,t)=>s+t.amount,0)
+                 + transactions.filter(t => t.payer === 'joint' && t.type === 'expense').reduce((s,t)=>s+t.amount,0);
 
   document.getElementById('gf-amount').textContent = fmt(gfExp);
   document.getElementById('bf-amount').textContent = fmt(bfExp);
@@ -141,16 +145,25 @@ function renderTxList(containerId, list, showDelete) {
     const pi = PAYER_INFO[t.payer] || PAYER_INFO.joint;
     const payerName = t.payer === 'girlfriend' ? settings.gfName
                     : t.payer === 'boyfriend'  ? settings.bfName : '共同貯金';
-    const metaParts = [payerName, fmtDate(t.date)];
-    if (t.note) metaParts.push(escHtml(t.note));
+
+    let categoryText, metaText;
+    if (t.type === 'transfer') {
+      const toName = t.transferTo === 'girlfriend' ? settings.gfName
+                   : t.transferTo === 'boyfriend'  ? settings.bfName : '共同貯金';
+      categoryText = `${payerName} → ${toName}`;
+      metaText = fmtDate(t.date) + (t.note ? ' · ' + escHtml(t.note) : '');
+    } else {
+      categoryText = t.category || TYPE_LABELS[t.type];
+      metaText = [payerName, fmtDate(t.date), t.note ? escHtml(t.note) : ''].filter(Boolean).join(' · ');
+    }
 
     const item = document.createElement('div');
     item.className = 'tx-item';
     item.innerHTML = `
       <div class="tx-payer-badge ${pi.class}">${pi.emoji}</div>
       <div class="tx-info">
-        <div class="tx-category">${t.category || TYPE_LABELS[t.type]}</div>
-        <div class="tx-meta">${metaParts.join(' · ')}</div>
+        <div class="tx-category">${categoryText}</div>
+        <div class="tx-meta">${metaText}</div>
       </div>
       <div class="tx-right">
         <div class="tx-amount ${t.type}">${sign(t.type, t.amount)}</div>
@@ -169,13 +182,18 @@ function renderSettle() {
   const gfExp  = txs.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const bfExp  = txs.filter(t=>t.payer==='boyfriend' &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const jExp   = txs.filter(t=>t.payer==='joint'     &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
-  const gfInc  = txs.filter(t=>t.payer==='girlfriend'&&t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const bfInc  = txs.filter(t=>t.payer==='boyfriend' &&t.type==='income').reduce((s,t)=>s+t.amount,0);
   // 貯金入金（入金者別）
   const gfDep  = txs.filter(t=>t.payer==='girlfriend'&&t.type==='deposit').reduce((s,t)=>s+t.amount,0);
   const bfDep  = txs.filter(t=>t.payer==='boyfriend' &&t.type==='deposit').reduce((s,t)=>s+t.amount,0);
   const jDep   = gfDep + bfDep;
-  const jWit   = txs.filter(t=>t.type==='withdraw').reduce((s,t)=>s+t.amount,0);
+  // 振替（人→人）による精算調整
+  // bf→gf 振替: bf がすでに gf に支払い済み（gf の立替分を回収済み）
+  const bfToGf = txs.filter(t=>t.type==='transfer'&&t.payer==='boyfriend' &&t.transferTo==='girlfriend').reduce((s,t)=>s+t.amount,0);
+  const gfToBf = txs.filter(t=>t.type==='transfer'&&t.payer==='girlfriend'&&t.transferTo==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
+  // 共同貯金絡みの振替（残高計算用）
+  const transferToJoint   = txs.filter(t=>t.type==='transfer'&&t.transferTo==='joint').reduce((s,t)=>s+t.amount,0);
+  const transferFromJoint = txs.filter(t=>t.type==='transfer'&&t.payer==='joint').reduce((s,t)=>s+t.amount,0);
+  const jWit = transferFromJoint;
 
   // 精算は個人支出のみ対象（共同貯金払い jExp は除外）
   const total = gfExp + bfExp;
@@ -189,9 +207,11 @@ function renderSettle() {
   const gfShouldPay = total * (gfR / ratioTotal);
   const bfShouldPay = total * (bfR / ratioTotal);
 
-  // 実際に払った額との差 (正 = 払いすぎ、負 = 払い足りない)
-  const gfDiff = gfExp - gfShouldPay;
-  const bfDiff = bfExp - bfShouldPay;
+  // 実際に払った額との差（振替による精算支払いも反映）
+  // netBfToGf > 0 なら bf がすでに gf に支払い済み → gf が立替た分を回収済み
+  const netBfToGf = bfToGf - gfToBf;
+  const gfDiff = (gfExp - gfShouldPay) - netBfToGf; // 正 = bf がまだ gf に払うべき
+  const bfDiff = (bfExp - bfShouldPay) + netBfToGf; // 正 = gf がまだ bf に払うべき（通常は逆符号）
 
   const iconEl   = document.getElementById('settle-icon');
   const descEl   = document.getElementById('settle-desc');
@@ -239,22 +259,22 @@ function renderSettle() {
       <div class="bd-avatar">👩</div>
       <div class="bd-info">
         <div class="bd-name">${settings.gfName}</div>
-        <div class="bd-detail">実際の支出 ${fmt(gfExp)} / 収入 ${fmt(gfInc)}</div>
+        <div class="bd-detail">支出 ${fmt(gfExp)}${netBfToGf!==0?' / 振替受取 '+fmt(netBfToGf):''}</div>
       </div>
       <div class="bd-amount ${gfDiff>=0?'positive':'negative'}">
         ${gfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(gfDiff)))}
-        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${gfDiff>=0?'払いすぎ':'不足'}</div>
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${gfDiff>=0?'未回収':'支払済超過'}</div>
       </div>
     </div>
     <div class="breakdown-item">
       <div class="bd-avatar">👨</div>
       <div class="bd-info">
         <div class="bd-name">${settings.bfName}</div>
-        <div class="bd-detail">実際の支出 ${fmt(bfExp)} / 収入 ${fmt(bfInc)}</div>
+        <div class="bd-detail">支出 ${fmt(bfExp)}${netBfToGf!==0?' / 振替送金 '+fmt(netBfToGf):''}</div>
       </div>
-      <div class="bd-amount ${bfDiff>=0?'positive':'negative'}">
-        ${bfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(bfDiff)))}
-        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${bfDiff>=0?'払いすぎ':'不足'}</div>
+      <div class="bd-amount ${-bfDiff>=0?'positive':'negative'}">
+        ${ -bfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(bfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${-bfDiff>=0?'払いすぎ':'不足'}</div>
       </div>
     </div>
     <div class="breakdown-item">
@@ -262,11 +282,11 @@ function renderSettle() {
       <div class="bd-info">
         <div class="bd-name">共同貯金</div>
         <div class="bd-detail">
-          入金 ${fmt(jDep)}（${settings.gfName} ${fmt(gfDep)} / ${settings.bfName} ${fmt(bfDep)}）<br>
+          入金 ${fmt(jDep)}（${settings.gfName} ${fmt(gfDep)} / ${settings.bfName} ${fmt(bfDep)}）${transferToJoint>0?' + 振替 '+fmt(transferToJoint):''}<br>
           出金 ${fmt(jWit)} / 共同払い ${fmt(jExp)}
         </div>
       </div>
-      <div class="bd-amount ${jDep-jWit>=0?'positive':'negative'}">${jDep-jWit>=0?'+':''}${fmt(jDep-jWit)}</div>
+      <div class="bd-amount ${jDep+transferToJoint-jWit-jExp>=0?'positive':'negative'}">${jDep+transferToJoint-jWit-jExp>=0?'+':''}${fmt(jDep+transferToJoint-jWit-jExp)}</div>
     </div>
   `;
 }
@@ -311,6 +331,7 @@ function openModal() {
   document.getElementById('input-date').value = new Date().toISOString().slice(0,10);
   setType('expense');
   setPayer('girlfriend');
+  setTransferTo('boyfriend');
   modalOverlay.classList.add('active');
   setTimeout(() => document.getElementById('input-amount').focus(), 300);
 }
@@ -323,26 +344,33 @@ function setType(type) {
     b.classList.toggle('active', b.dataset.type === type);
   });
 
-  const jointBtn = document.getElementById('payer-joint-btn');
-  const label    = document.getElementById('payer-group-label');
+  const jointBtn       = document.getElementById('payer-joint-btn');
+  const label          = document.getElementById('payer-group-label');
+  const transferToGrp  = document.getElementById('transfer-to-group');
+  const categoryGrp    = document.getElementById('category-group');
 
-  if (type === 'withdraw') {
-    // 出金は個人特定不要 — 支出元ごと非表示
-    document.getElementById('payer-group').style.display    = 'none';
-    document.getElementById('category-group').style.display = 'none';
-  } else if (type === 'deposit') {
-    // 入金者は彼女/彼氏のみ（共同貯金ボタンを隠す）
-    document.getElementById('payer-group').style.display    = 'block';
-    document.getElementById('category-group').style.display = 'none';
-    label.textContent     = '入金者';
-    jointBtn.style.display = 'none';
+  if (type === 'deposit') {
+    // 入金者は彼女/彼氏のみ
+    document.getElementById('payer-group').style.display = 'block';
+    label.textContent        = '入金者';
+    jointBtn.style.display   = 'none';
+    transferToGrp.style.display = 'none';
+    categoryGrp.style.display   = 'none';
     if (currentPayer === 'joint') setPayer('girlfriend');
+  } else if (type === 'transfer') {
+    // 振替元：全3択、振替先：全3択
+    document.getElementById('payer-group').style.display = 'block';
+    label.textContent        = '振替元';
+    jointBtn.style.display   = '';
+    transferToGrp.style.display = 'block';
+    categoryGrp.style.display   = 'none';
   } else {
-    // expense / income — 全3択（共同貯金含む）
-    document.getElementById('payer-group').style.display    = 'block';
-    document.getElementById('category-group').style.display = 'block';
-    label.textContent      = type === 'expense' ? '支出元' : '収入先';
-    jointBtn.style.display = '';
+    // expense — 全3択（共同貯金含む）
+    document.getElementById('payer-group').style.display = 'block';
+    label.textContent        = '支出元';
+    jointBtn.style.display   = '';
+    transferToGrp.style.display = 'none';
+    categoryGrp.style.display   = 'block';
   }
 }
 
@@ -350,6 +378,13 @@ function setPayer(payer) {
   currentPayer = payer;
   document.querySelectorAll('.payer-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.payer === payer);
+  });
+}
+
+function setTransferTo(to) {
+  currentTransferTo = to;
+  document.querySelectorAll('.transfer-to-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.to === to);
   });
 }
 
@@ -363,6 +398,9 @@ document.querySelectorAll('.type-btn').forEach(btn => {
 document.querySelectorAll('.payer-btn').forEach(btn => {
   btn.addEventListener('click', () => setPayer(btn.dataset.payer));
 });
+document.querySelectorAll('.transfer-to-btn').forEach(btn => {
+  btn.addEventListener('click', () => setTransferTo(btn.dataset.to));
+});
 
 // ── 保存 ──────────────────────────────────────────
 document.getElementById('btn-save').addEventListener('click', () => {
@@ -374,21 +412,23 @@ document.getElementById('btn-save').addEventListener('click', () => {
   if (!amount || amount <= 0) { alert('金額を入力してください'); return; }
   if (!date) { alert('日付を入力してください'); return; }
 
-  // payer の決定
-  // - withdraw は常に joint
-  // - deposit は currentPayer (gf/bf) — 誰が入金したか記録
-  // - expense/income は currentPayer (gf/bf/joint)
-  const payer = currentType === 'withdraw' ? 'joint' : currentPayer;
+  if (currentType === 'transfer' && currentPayer === currentTransferTo) {
+    alert('振替元と振替先が同じです');
+    return;
+  }
 
-  transactions.unshift({
+  const tx = {
     id: Date.now(),
     type: currentType,
-    payer,
+    payer: currentPayer,
     amount,
-    category: (currentType === 'deposit' || currentType === 'withdraw') ? '共同貯金' : cat,
+    category: currentType === 'deposit' ? '貯金入金' : currentType === 'transfer' ? '振替' : cat,
     note,
     date
-  });
+  };
+  if (currentType === 'transfer') tx.transferTo = currentTransferTo;
+
+  transactions.unshift(tx);
 
   save();
   renderAll();
