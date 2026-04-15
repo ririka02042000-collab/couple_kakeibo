@@ -249,9 +249,9 @@ function renderSettle() {
         <div class="bd-name">${settings.bfName}</div>
         <div class="bd-detail">支出 ${fmt(bfExp)}${netBfToGf!==0?' / 振替送金 '+fmt(netBfToGf):''}</div>
       </div>
-      <div class="bd-amount ${-bfDiff>=0?'positive':'negative'}">
-        ${ -bfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(bfDiff)))}
-        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${-bfDiff>=0?'払いすぎ':'不足'}</div>
+      <div class="bd-amount ${bfDiff<=0?'negative':'positive'}">
+        ${bfDiff<=0?'▽':'△'}${fmt(Math.round(Math.abs(bfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${bfDiff<=0?'未払い':'払いすぎ'}</div>
       </div>
     </div>
     <div class="breakdown-item">
@@ -297,9 +297,9 @@ function renderSettle() {
       <div class="bd-info">
         <div class="bd-name">${settings.bfName}</div>
       </div>
-      <div class="bd-amount ${-allBfDiff>=0?'positive':'negative'}">
-        ${-allBfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(allBfDiff)))}
-        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${-allBfDiff>=0?'払いすぎ':'不足'}</div>
+      <div class="bd-amount ${allBfDiff<=0?'negative':'positive'}">
+        ${allBfDiff<=0?'▽':'△'}${fmt(Math.round(Math.abs(allBfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${allBfDiff<=0?'未払い':'払いすぎ'}</div>
       </div>
     </div>
   `;
