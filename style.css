@@ -437,8 +437,9 @@ body {
   transition: all 0.2s;
 }
 
-.payer-btn.active[data-payer="girlfriend"] { border-color: var(--gf); background: var(--gf-light); }
-.payer-btn.active[data-payer="boyfriend"]  { border-color: var(--bf); background: var(--bf-light); }
+.payer-btn.active[data-payer="girlfriend"] { border-color: var(--gf);    background: var(--gf-light); }
+.payer-btn.active[data-payer="boyfriend"]  { border-color: var(--bf);    background: var(--bf-light); }
+.payer-btn.active[data-payer="joint"]      { border-color: var(--joint); background: var(--joint-light); }
 
 .payer-avatar { font-size: 1.5rem; }
 .payer-name { font-size: 0.78rem; font-weight: 700; color: var(--text); }

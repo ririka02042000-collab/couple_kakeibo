@@ -165,13 +165,19 @@ function renderTxList(containerId, list, showDelete) {
 function renderSettle() {
   const txs = monthTx();
 
-  const gfExp = txs.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
-  const bfExp = txs.filter(t=>t.payer==='boyfriend' &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
-  const gfInc = txs.filter(t=>t.payer==='girlfriend'&&t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const bfInc = txs.filter(t=>t.payer==='boyfriend' &&t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const jDep  = txs.filter(t=>t.type==='deposit').reduce((s,t)=>s+t.amount,0);
-  const jWit  = txs.filter(t=>t.type==='withdraw').reduce((s,t)=>s+t.amount,0);
+  // 個人支出（精算対象：共同貯金払いは除外）
+  const gfExp  = txs.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const bfExp  = txs.filter(t=>t.payer==='boyfriend' &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const jExp   = txs.filter(t=>t.payer==='joint'     &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const gfInc  = txs.filter(t=>t.payer==='girlfriend'&&t.type==='income').reduce((s,t)=>s+t.amount,0);
+  const bfInc  = txs.filter(t=>t.payer==='boyfriend' &&t.type==='income').reduce((s,t)=>s+t.amount,0);
+  // 貯金入金（入金者別）
+  const gfDep  = txs.filter(t=>t.payer==='girlfriend'&&t.type==='deposit').reduce((s,t)=>s+t.amount,0);
+  const bfDep  = txs.filter(t=>t.payer==='boyfriend' &&t.type==='deposit').reduce((s,t)=>s+t.amount,0);
+  const jDep   = gfDep + bfDep;
+  const jWit   = txs.filter(t=>t.type==='withdraw').reduce((s,t)=>s+t.amount,0);
 
+  // 精算は個人支出のみ対象（共同貯金払い jExp は除外）
   const total = gfExp + bfExp;
 
   // 負担割合を計算（設定値をそのまま比率として使用）
@@ -255,7 +261,10 @@ function renderSettle() {
       <div class="bd-avatar">🏦</div>
       <div class="bd-info">
         <div class="bd-name">共同貯金</div>
-        <div class="bd-detail">入金 ${fmt(jDep)} / 出金 ${fmt(jWit)}</div>
+        <div class="bd-detail">
+          入金 ${fmt(jDep)}（${settings.gfName} ${fmt(gfDep)} / ${settings.bfName} ${fmt(bfDep)}）<br>
+          出金 ${fmt(jWit)} / 共同払い ${fmt(jExp)}
+        </div>
       </div>
       <div class="bd-amount ${jDep-jWit>=0?'positive':'negative'}">${jDep-jWit>=0?'+':''}${fmt(jDep-jWit)}</div>
     </div>
@@ -313,10 +322,28 @@ function setType(type) {
   document.querySelectorAll('.type-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.type === type);
   });
-  // 共同貯金系は支出元を隠す
-  const isPersonal = type === 'expense' || type === 'income';
-  document.getElementById('payer-group').style.display    = isPersonal ? 'block' : 'none';
-  document.getElementById('category-group').style.display = (type === 'expense' || type === 'income') ? 'block' : 'none';
+
+  const jointBtn = document.getElementById('payer-joint-btn');
+  const label    = document.getElementById('payer-group-label');
+
+  if (type === 'withdraw') {
+    // 出金は個人特定不要 — 支出元ごと非表示
+    document.getElementById('payer-group').style.display    = 'none';
+    document.getElementById('category-group').style.display = 'none';
+  } else if (type === 'deposit') {
+    // 入金者は彼女/彼氏のみ（共同貯金ボタンを隠す）
+    document.getElementById('payer-group').style.display    = 'block';
+    document.getElementById('category-group').style.display = 'none';
+    label.textContent     = '入金者';
+    jointBtn.style.display = 'none';
+    if (currentPayer === 'joint') setPayer('girlfriend');
+  } else {
+    // expense / income — 全3択（共同貯金含む）
+    document.getElementById('payer-group').style.display    = 'block';
+    document.getElementById('category-group').style.display = 'block';
+    label.textContent      = type === 'expense' ? '支出元' : '収入先';
+    jointBtn.style.display = '';
+  }
 }
 
 function setPayer(payer) {
@@ -347,8 +374,11 @@ document.getElementById('btn-save').addEventListener('click', () => {
   if (!amount || amount <= 0) { alert('金額を入力してください'); return; }
   if (!date) { alert('日付を入力してください'); return; }
 
-  const isPersonal = currentType === 'expense' || currentType === 'income';
-  const payer = isPersonal ? currentPayer : 'joint';
+  // payer の決定
+  // - withdraw は常に joint
+  // - deposit は currentPayer (gf/bf) — 誰が入金したか記録
+  // - expense/income は currentPayer (gf/bf/joint)
+  const payer = currentType === 'withdraw' ? 'joint' : currentPayer;
 
   transactions.unshift({
     id: Date.now(),

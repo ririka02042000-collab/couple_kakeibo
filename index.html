@@ -131,9 +131,9 @@
         <button class="type-btn" data-type="withdraw">貯金出金</button>
       </div>
 
-      <!-- 支出元（収入/支出のみ表示） -->
+      <!-- 支出元 -->
       <div class="form-group" id="payer-group">
-        <label>支出元</label>
+        <label id="payer-group-label">支出元</label>
         <div class="payer-toggle">
           <button class="payer-btn active" data-payer="girlfriend">
             <span class="payer-avatar">👩</span>
@@ -142,6 +142,10 @@
           <button class="payer-btn" data-payer="boyfriend">
             <span class="payer-avatar">👨</span>
             <span class="payer-name" id="payer-bf-label">彼氏</span>
+          </button>
+          <button class="payer-btn" data-payer="joint" id="payer-joint-btn">
+            <span class="payer-avatar">🏦</span>
+            <span class="payer-name">共同貯金</span>
           </button>
         </div>
       </div>
