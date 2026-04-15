@@ -254,17 +254,6 @@ function renderSettle() {
         <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${bfDiff<=0?'未払い':'払いすぎ'}</div>
       </div>
     </div>
-    <div class="breakdown-item">
-      <div class="bd-avatar">🏦</div>
-      <div class="bd-info">
-        <div class="bd-name">共同貯金</div>
-        <div class="bd-detail">
-          入金 ${fmt(jDep)}（${settings.gfName} ${fmt(gfDep)} / ${settings.bfName} ${fmt(bfDep)}）<br>
-          出金 ${fmt(jWit)} / 共同払い ${fmt(jExp)}
-        </div>
-      </div>
-      <div class="bd-amount ${jDep-jWit-jExp>=0?'positive':'negative'}">${jDep-jWit-jExp>=0?'+':''}${fmt(jDep-jWit-jExp)}</div>
-    </div>
   `;
 
   // ── 全期間の内訳（未回収/払いすぎのみ）──────────────
