@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>家計簿アプリ</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>家計簿アプリ</h1>
+
+    <!-- 残高表示 -->
+    <div class="balance-card">
+      <p class="balance-label">現在の残高</p>
+      <p class="balance-amount" id="balance">¥0</p>
+      <div class="summary">
+        <div class="summary-item income">
+          <span>収入</span>
+          <span id="total-income">¥0</span>
+        </div>
+        <div class="divider"></div>
+        <div class="summary-item expense">
+          <span>支出</span>
+          <span id="total-expense">¥0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- フィルター -->
+    <div class="filter-bar">
+      <select id="filter-month">
+        <option value="">すべての月</option>
+      </select>
+      <select id="filter-category">
+        <option value="">すべてのカテゴリ</option>
+        <option value="給与">給与</option>
+        <option value="副収入">副収入</option>
+        <option value="食費">食費</option>
+        <option value="住居費">住居費</option>
+        <option value="交通費">交通費</option>
+        <option value="光熱費">光熱費</option>
+        <option value="通信費">通信費</option>
+        <option value="医療費">医療費</option>
+        <option value="娯楽費">娯楽費</option>
+        <option value="衣類">衣類</option>
+        <option value="その他">その他</option>
+      </select>
+      <select id="filter-type">
+        <option value="">すべて</option>
+        <option value="income">収入のみ</option>
+        <option value="expense">支出のみ</option>
+      </select>
+    </div>
+
+    <!-- 取引一覧 -->
+    <div class="transaction-list" id="transaction-list">
+      <p class="empty-msg" id="empty-msg">取引がありません</p>
+    </div>
+
+    <!-- 追加ボタン -->
+    <button class="add-btn" id="add-btn">＋ 取引を追加</button>
+  </div>
+
+  <!-- モーダル -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <h2 id="modal-title">取引を追加</h2>
+
+      <div class="type-toggle">
+        <button class="type-btn active" id="btn-expense" data-type="expense">支出</button>
+        <button class="type-btn" id="btn-income" data-type="income">収入</button>
+      </div>
+
+      <div class="form-group">
+        <label>金額 (円)</label>
+        <input type="number" id="input-amount" placeholder="0" min="1">
+      </div>
+
+      <div class="form-group">
+        <label>カテゴリ</label>
+        <select id="input-category">
+          <option value="食費">食費</option>
+          <option value="住居費">住居費</option>
+          <option value="交通費">交通費</option>
+          <option value="光熱費">光熱費</option>
+          <option value="通信費">通信費</option>
+          <option value="医療費">医療費</option>
+          <option value="娯楽費">娯楽費</option>
+          <option value="衣類">衣類</option>
+          <option value="給与">給与</option>
+          <option value="副収入">副収入</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>メモ</label>
+        <input type="text" id="input-note" placeholder="メモ（任意）">
+      </div>
+
+      <div class="form-group">
+        <label>日付</label>
+        <input type="date" id="input-date">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-cancel" id="btn-cancel">キャンセル</button>
+        <button class="btn-save" id="btn-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
