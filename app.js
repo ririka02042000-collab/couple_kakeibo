@@ -214,23 +214,6 @@ function renderSettle() {
   const gfDiff = (gfExp - gfShouldPay) - netBfToGf; // 正 = bf がまだ gf に払うべき
   const bfDiff = (bfExp - bfShouldPay) + netBfToGf; // 正 = gf がまだ bf に払うべき（通常は逆符号）
 
-  const iconEl = document.getElementById('settle-icon');
-  const descEl = document.getElementById('settle-desc');
-
-  if (total === 0) {
-    iconEl.textContent = '⚖️';
-    descEl.textContent = '今月の支出はありません';
-  } else if (Math.abs(gfDiff) < 10) {
-    iconEl.textContent = '✅';
-    descEl.textContent = '精算の必要はありません！';
-  } else if (gfDiff > 0) {
-    iconEl.textContent = '💸';
-    descEl.textContent = `${settings.bfName} → ${settings.gfName}　${fmt(Math.round(gfDiff))}`;
-  } else {
-    iconEl.textContent = '💸';
-    descEl.textContent = `${settings.gfName} → ${settings.bfName}　${fmt(Math.round(Math.abs(bfDiff)))}`;
-  }
-
   // 割合表示テキスト
   const ratioLabel = (gfR === bfR)
     ? '（折半）'
