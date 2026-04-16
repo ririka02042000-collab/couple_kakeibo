@@ -475,6 +475,58 @@ body {
 .form-group input:focus,
 .form-group select:focus { border-color: var(--joint); }
 
+/* 割合履歴 */
+.ratio-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.ratio-history-item {
+  display: flex;
+  align-items: center;
+  background: #f8f7ff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.ratio-history-item .rh-date {
+  color: var(--muted);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.ratio-history-item .rh-ratio {
+  flex: 1;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ratio-history-item .rh-delete {
+  background: none;
+  border: none;
+  color: #d1d5db;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.ratio-history-item .rh-delete:hover {
+  color: var(--expense);
+  background: #fee2e2;
+}
+
+.ratio-add-section {
+  border-top: 1px dashed var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
+}
+
 /* 割合入力 */
 .ratio-row {
   display: flex;
