@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ふたり家計簿 - ログイン</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(160deg, #f0eeff 0%, #fce7f3 100%);
+      padding: 24px;
+    }
+
+    .login-card {
+      background: white;
+      border-radius: 24px;
+      padding: 36px 28px 32px;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: 0 8px 40px rgba(124, 58, 237, 0.15);
+      animation: fadeUp 0.4s ease;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .login-logo .logo-icon {
+      font-size: 2.8rem;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .login-logo h1 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #1e1b4b;
+    }
+
+    .login-logo p {
+      font-size: 0.8rem;
+      color: #6b7280;
+      margin-top: 4px;
+    }
+
+    .login-form .form-group {
+      margin-bottom: 16px;
+    }
+
+    .login-form label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #6b7280;
+      margin-bottom: 6px;
+    }
+
+    .login-form input {
+      width: 100%;
+      padding: 13px 16px;
+      border: 1.5px solid #e5e7eb;
+      border-radius: 12px;
+      font-size: 1rem;
+      color: #1e1b4b;
+      background: #f8f7ff;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .login-form input:focus {
+      border-color: #a78bfa;
+      box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15);
+      background: white;
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #7c3aed, #a78bfa);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: opacity 0.2s, transform 0.1s;
+      box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35);
+    }
+
+    .login-btn:hover  { opacity: 0.9; }
+    .login-btn:active { transform: scale(0.98); }
+
+    .error-msg {
+      color: #ef4444;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-align: center;
+      margin-top: 12px;
+      min-height: 18px;
+      animation: shake 0.3s ease;
+    }
+
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25%      { transform: translateX(-6px); }
+      75%      { transform: translateX(6px); }
+    }
+
+    .pw-wrap {
+      position: relative;
+    }
+
+    .pw-toggle {
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.1rem;
+      color: #9ca3af;
+      padding: 0;
+      line-height: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-logo">
+      <span class="logo-icon">💑</span>
+      <h1>ふたり家計簿</h1>
+      <p>ログインしてください</p>
+    </div>
+
+    <form class="login-form" id="login-form" autocomplete="off">
+      <div class="form-group">
+        <label>ID</label>
+        <input type="text" id="input-id" placeholder="IDを入力" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>パスワード</label>
+        <div class="pw-wrap">
+          <input type="password" id="input-pw" placeholder="パスワードを入力" autocomplete="current-password">
+          <button type="button" class="pw-toggle" id="pw-toggle">👁️</button>
+        </div>
+      </div>
+      <button type="submit" class="login-btn">ログイン</button>
+      <p class="error-msg" id="error-msg"></p>
+    </form>
+  </div>
+
+  <script>
+    // 既にログイン済みなら即リダイレクト
+    if (sessionStorage.getItem('kakeibo_auth') === '1') {
+      location.replace('index.html');
+    }
+
+    const CREDENTIALS = [
+      { id: 'nyaa526', pw: 'RiTa101524' }
+    ];
+
+    document.getElementById('login-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const id  = document.getElementById('input-id').value.trim();
+      const pw  = document.getElementById('input-pw').value;
+      const err = document.getElementById('error-msg');
+
+      const ok = CREDENTIALS.some(c => c.id === id && c.pw === pw);
+      if (ok) {
+        sessionStorage.setItem('kakeibo_auth', '1');
+        location.replace('index.html');
+      } else {
+        err.textContent = 'IDまたはパスワードが違います';
+        // アニメーション再実行
+        err.style.animation = 'none';
+        err.offsetHeight;
+        err.style.animation = '';
+        document.getElementById('input-pw').value = '';
+        document.getElementById('input-pw').focus();
+      }
+    });
+
+    // パスワード表示切り替え
+    document.getElementById('pw-toggle').addEventListener('click', () => {
+      const inp = document.getElementById('input-pw');
+      inp.type = inp.type === 'password' ? 'text' : 'password';
+    });
+  </script>
+</body>
+</html>

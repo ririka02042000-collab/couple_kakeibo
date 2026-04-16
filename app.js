@@ -541,6 +541,14 @@ document.getElementById('settings-save').addEventListener('click', () => {
   settingsOverlay.classList.remove('active');
 });
 
+// ── ログアウト ────────────────────────────────────
+document.getElementById('logout-btn').addEventListener('click', () => {
+  if (confirm('ログアウトしますか？')) {
+    sessionStorage.removeItem('kakeibo_auth');
+    location.replace('login.html');
+  }
+});
+
 // ── 初期化 ────────────────────────────────────────
 applyNames();
 renderAll();

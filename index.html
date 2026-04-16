@@ -5,13 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>ふたり家計簿</title>
   <link rel="stylesheet" href="style.css">
+  <script>
+    // 未ログインならログイン画面へ
+    if (sessionStorage.getItem('kakeibo_auth') !== '1') {
+      location.replace('login.html');
+    }
+  </script>
 </head>
 <body>
 
   <!-- ヘッダー -->
   <header class="app-header">
     <h1>💑 ふたり家計簿</h1>
-    <button class="settings-btn" id="settings-btn">⚙️</button>
+    <div class="header-actions">
+      <button class="settings-btn" id="settings-btn">⚙️</button>
+      <button class="logout-btn" id="logout-btn" title="ログアウト">🚪</button>
+    </div>
   </header>
 
   <!-- タブ -->
