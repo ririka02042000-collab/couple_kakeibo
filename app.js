@@ -123,8 +123,8 @@ function renderHome() {
   // 彼氏支出
   const bfExp = txs.filter(t => t.payer === 'boyfriend'  && t.type === 'expense')
                     .reduce((s,t) => s+t.amount, 0);
-  // 共有財布残高（全期間）
-  // 共有財布 残額（全期間）
+  // 共用財布残高（全期間）
+  // 共用財布 残額（全期間）
   const allJointIn  = transactions.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
   const allJointOut = transactions.filter(t => (t.type === 'transfer' && t.payer === 'joint') || (t.payer === 'joint' && t.type === 'expense')).reduce((s,t)=>s+t.amount,0);
   // その月の支出・入金
@@ -188,12 +188,12 @@ function renderTxList(containerId, list, showDelete) {
   list.forEach(t => {
     const pi = PAYER_INFO[t.payer] || PAYER_INFO.joint;
     const payerName = t.payer === 'girlfriend' ? settings.gfName
-                    : t.payer === 'boyfriend'  ? settings.bfName : '共有財布';
+                    : t.payer === 'boyfriend'  ? settings.bfName : '共用財布';
 
     let categoryText, metaText;
     if (t.type === 'transfer') {
       const toName = t.transferTo === 'girlfriend' ? settings.gfName
-                   : t.transferTo === 'boyfriend'  ? settings.bfName : '共有財布';
+                   : t.transferTo === 'boyfriend'  ? settings.bfName : '共用財布';
       categoryText = `${payerName} → ${toName}`;
       metaText = fmtDate(t.date) + (t.note ? ' · ' + escHtml(t.note) : '');
     } else {
@@ -222,11 +222,11 @@ function renderTxList(containerId, list, showDelete) {
 function renderSettle() {
   const txs = monthTx();
 
-  // 個人支出（精算対象：共有財布払いは除外）
+  // 個人支出（精算対象：共用財布払いは除外）
   const gfExp  = txs.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const bfExp  = txs.filter(t=>t.payer==='boyfriend' &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const jExp   = txs.filter(t=>t.payer==='joint'     &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
-  // 共有財布入金（振替→jointで管理、旧depositデータも合算）
+  // 共用財布入金（振替→jointで管理、旧depositデータも合算）
   const gfDep  = txs.filter(t=>t.payer==='girlfriend'&&(t.type==='deposit'||(t.type==='transfer'&&t.transferTo==='joint'))).reduce((s,t)=>s+t.amount,0);
   const bfDep  = txs.filter(t=>t.payer==='boyfriend' &&(t.type==='deposit'||(t.type==='transfer'&&t.transferTo==='joint'))).reduce((s,t)=>s+t.amount,0);
   const jDep   = gfDep + bfDep;
@@ -234,11 +234,11 @@ function renderSettle() {
   // bf→gf 振替: bf がすでに gf に支払い済み（gf の立替分を回収済み）
   const bfToGf = txs.filter(t=>t.type==='transfer'&&t.payer==='boyfriend' &&t.transferTo==='girlfriend').reduce((s,t)=>s+t.amount,0);
   const gfToBf = txs.filter(t=>t.type==='transfer'&&t.payer==='girlfriend'&&t.transferTo==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
-  // 共有財布からの出金（振替元=joint）
+  // 共用財布からの出金（振替元=joint）
   const transferFromJoint = txs.filter(t=>t.type==='transfer'&&t.payer==='joint').reduce((s,t)=>s+t.amount,0);
   const jWit = transferFromJoint;
 
-  // 精算は個人支出のみ対象（共有財布払い jExp は除外）
+  // 精算は個人支出のみ対象（共用財布払い jExp は除外）
   // トランザクションごとに日付対応の割合で按分
   const personalExpTxs = txs.filter(t => t.type === 'expense' && (t.payer === 'girlfriend' || t.payer === 'boyfriend'));
   let gfShouldPay = 0, bfShouldPay = 0;
@@ -406,7 +406,7 @@ function setType(type) {
     transferToGrp.style.display = 'block';
     categoryGrp.style.display   = 'none';
   } else {
-    // expense — 全3択（共有財布含む）
+    // expense — 全3択（共用財布含む）
     document.getElementById('payer-group').style.display = 'block';
     label.textContent        = '支出元';
     jointBtn.style.display   = '';
