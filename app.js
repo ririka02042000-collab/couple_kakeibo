@@ -132,8 +132,10 @@ function renderHome() {
   // 共用財布 残額（全期間）
   const allJointIn  = transactions.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
   const allJointOut = transactions.filter(t => (t.type === 'transfer' && t.payer === 'joint') || (t.payer === 'joint' && t.type === 'expense')).reduce((s,t)=>s+t.amount,0);
-  // その月の支出・入金
-  const monthJointExp = txs.filter(t => t.payer === 'joint' && t.type === 'expense').reduce((s,t)=>s+t.amount,0);
+  // その月の支出・入金（支出 + 振替出金、入金 + 振替入金）
+  const monthJointExpOnly  = txs.filter(t => t.payer === 'joint' && t.type === 'expense').reduce((s,t)=>s+t.amount,0);
+  const monthJointTransOut = txs.filter(t => t.payer === 'joint' && t.type === 'transfer').reduce((s,t)=>s+t.amount,0);
+  const monthJointExp = monthJointExpOnly + monthJointTransOut;
   const monthJointIn  = txs.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
 
   document.getElementById('gf-amount').textContent      = fmt(gfTotal);
