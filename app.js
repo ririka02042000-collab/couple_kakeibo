@@ -117,12 +117,17 @@ function renderHome() {
 
   const txs = monthTx();
 
-  // 彼女支出
-  const gfExp = txs.filter(t => t.payer === 'girlfriend' && t.type === 'expense')
-                    .reduce((s,t) => s+t.amount, 0);
-  // 彼氏支出
-  const bfExp = txs.filter(t => t.payer === 'boyfriend'  && t.type === 'expense')
-                    .reduce((s,t) => s+t.amount, 0);
+  // 彼女支出（支出 + 振替送金 − 振替受取）
+  const gfExp        = txs.filter(t => t.payer === 'girlfriend' && t.type === 'expense').reduce((s,t) => s+t.amount, 0);
+  const gfTransferOut = txs.filter(t => t.payer === 'girlfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
+  const gfTransferIn  = txs.filter(t => t.transferTo === 'girlfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
+  const gfTotal = gfExp + gfTransferOut - gfTransferIn;
+
+  // 彼氏支出（支出 + 振替送金 − 振替受取）
+  const bfExp        = txs.filter(t => t.payer === 'boyfriend' && t.type === 'expense').reduce((s,t) => s+t.amount, 0);
+  const bfTransferOut = txs.filter(t => t.payer === 'boyfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
+  const bfTransferIn  = txs.filter(t => t.transferTo === 'boyfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
+  const bfTotal = bfExp + bfTransferOut - bfTransferIn;
   // 共用財布残高（全期間）
   // 共用財布 残額（全期間）
   const allJointIn  = transactions.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
@@ -131,8 +136,8 @@ function renderHome() {
   const monthJointExp = txs.filter(t => t.payer === 'joint' && t.type === 'expense').reduce((s,t)=>s+t.amount,0);
   const monthJointIn  = txs.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
 
-  document.getElementById('gf-amount').textContent      = fmt(gfExp);
-  document.getElementById('bf-amount').textContent      = fmt(bfExp);
+  document.getElementById('gf-amount').textContent      = fmt(gfTotal);
+  document.getElementById('bf-amount').textContent      = fmt(bfTotal);
   document.getElementById('joint-balance').textContent  = fmt(allJointIn - allJointOut);
   document.getElementById('joint-expense').textContent  = fmt(monthJointExp);
   document.getElementById('joint-in').textContent       = fmt(monthJointIn);
