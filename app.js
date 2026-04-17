@@ -278,7 +278,6 @@ function renderSettle() {
       </div>
     </div>
     <div class="breakdown-item">
-      <div class="bd-avatar">👩</div>
       <div class="bd-info">
         <div class="bd-name">${settings.gfName}</div>
         <div class="bd-detail">支出 ${fmt(gfExp)}${netBfToGf!==0?' / 振替受取 '+fmt(netBfToGf):''}</div>
@@ -289,7 +288,6 @@ function renderSettle() {
       </div>
     </div>
     <div class="breakdown-item">
-      <div class="bd-avatar">👨</div>
       <div class="bd-info">
         <div class="bd-name">${settings.bfName}</div>
         <div class="bd-detail">支出 ${fmt(bfExp)}${netBfToGf!==0?' / 振替送金 '+fmt(netBfToGf):''}</div>
@@ -322,7 +320,6 @@ function renderSettle() {
   const bdAllEl = document.getElementById('breakdown-list-all');
   bdAllEl.innerHTML = `
     <div class="breakdown-item">
-      <div class="bd-avatar">👩</div>
       <div class="bd-info">
         <div class="bd-name">${settings.gfName}</div>
       </div>
@@ -332,7 +329,6 @@ function renderSettle() {
       </div>
     </div>
     <div class="breakdown-item">
-      <div class="bd-avatar">👨</div>
       <div class="bd-info">
         <div class="bd-name">${settings.bfName}</div>
       </div>
