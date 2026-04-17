@@ -431,7 +431,8 @@ body {
 }
 
 .payer-btn,
-.transfer-to-btn {
+.transfer-to-btn,
+.ben-btn {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -451,6 +452,10 @@ body {
 .transfer-to-btn.active[data-to="boyfriend"]  { border-color: var(--bf);    background: var(--bf-light); }
 .payer-btn.active[data-payer="joint"],
 .transfer-to-btn.active[data-to="joint"]      { border-color: var(--joint); background: var(--joint-light); }
+
+.ben-btn.active[data-ben="none"]       { border-color: var(--joint); background: var(--joint-light); }
+.ben-btn.active[data-ben="girlfriend"] { border-color: var(--gf);    background: var(--gf-light); }
+.ben-btn.active[data-ben="boyfriend"]  { border-color: var(--bf);    background: var(--bf-light); }
 
 .payer-avatar { font-size: 1.5rem; }
 .payer-name { font-size: 0.78rem; font-weight: 700; color: var(--text); }

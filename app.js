@@ -24,9 +24,10 @@ let settings = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":
 if (!settings.ratioHistory) {
   settings.ratioHistory = [{ from: '1970-01-01', gfRatio: settings.gfRatio || 1, bfRatio: settings.bfRatio || 1 }];
 }
-let currentType       = 'expense';
-let currentPayer      = 'girlfriend';
-let currentTransferTo = 'boyfriend';
+let currentType        = 'expense';
+let currentPayer       = 'girlfriend';
+let currentTransferTo  = 'boyfriend';
+let currentBeneficiary = 'none';
 let viewMonth    = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 
 // ── ユーティリティ ─────────────────────────────────
@@ -68,6 +69,8 @@ function applyNames() {
   document.getElementById('ratio-bf-label').textContent       = settings.bfName;
   document.getElementById('transfer-to-gf-label').textContent = settings.gfName;
   document.getElementById('transfer-to-bf-label').textContent = settings.bfName;
+  document.getElementById('ben-gf-label').textContent = settings.gfName;
+  document.getElementById('ben-bf-label').textContent = settings.bfName;
 
   // フィルターの選択肢も更新
   const opts = document.querySelectorAll('#filter-payer option');
@@ -121,13 +124,16 @@ function renderHome() {
   const gfExp        = txs.filter(t => t.payer === 'girlfriend' && t.type === 'expense').reduce((s,t) => s+t.amount, 0);
   const gfTransferOut = txs.filter(t => t.payer === 'girlfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
   const gfTransferIn  = txs.filter(t => t.transferTo === 'girlfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
-  const gfTotal = gfExp + gfTransferOut - gfTransferIn;
+  // 共用財布払い個人支出
+  const jointPersonalForGf = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary === 'girlfriend').reduce((s,t) => s+t.amount, 0);
+  const gfTotal = gfExp + gfTransferOut - gfTransferIn + jointPersonalForGf;
 
   // 彼氏支出（支出 + 振替送金 − 振替受取）
   const bfExp        = txs.filter(t => t.payer === 'boyfriend' && t.type === 'expense').reduce((s,t) => s+t.amount, 0);
   const bfTransferOut = txs.filter(t => t.payer === 'boyfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
   const bfTransferIn  = txs.filter(t => t.transferTo === 'boyfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
-  const bfTotal = bfExp + bfTransferOut - bfTransferIn;
+  const jointPersonalForBf = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary === 'boyfriend').reduce((s,t) => s+t.amount, 0);
+  const bfTotal = bfExp + bfTransferOut - bfTransferIn + jointPersonalForBf;
   // 共用財布残高（全期間）
   // 共用財布 残額（全期間）
   const allJointIn  = transactions.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
@@ -204,7 +210,9 @@ function renderTxList(containerId, list, showDelete) {
       categoryText = `${payerName} → ${toName}`;
       metaText = fmtDate(t.date) + (t.note ? ' · ' + escHtml(t.note) : '');
     } else {
-      categoryText = t.category || TYPE_LABELS[t.type];
+      const benName = t.beneficiary === 'girlfriend' ? settings.gfName
+                    : t.beneficiary === 'boyfriend'  ? settings.bfName : null;
+      categoryText = (t.category || TYPE_LABELS[t.type]) + (benName ? ` (${benName}個人)` : '');
       metaText = [payerName, fmtDate(t.date), t.note ? escHtml(t.note) : ''].filter(Boolean).join(' · ');
     }
 
@@ -280,6 +288,11 @@ function renderSettle() {
     const rt = (Number(r.gfRatio)||1) + (Number(r.bfRatio)||1);
     gfShouldPay -= t.amount * (Number(r.gfRatio)||1) / rt;
     bfShouldPay -= t.amount * (Number(r.bfRatio)||1) / rt;
+  });
+  // 共用財布払い個人支出（100%その人の負担）
+  txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary).forEach(t => {
+    if (t.beneficiary === 'girlfriend') gfShouldPay += t.amount;
+    else if (t.beneficiary === 'boyfriend') bfShouldPay += t.amount;
   });
 
   // 差額（正 = 払いすぎ＝未回収、負 = 未払い）
@@ -372,6 +385,11 @@ function renderSettle() {
     allGfShouldPay -= t.amount * (Number(r.gfRatio)||1) / rt;
     allBfShouldPay -= t.amount * (Number(r.bfRatio)||1) / rt;
   });
+  // 共用財布払い個人支出（100%その人の負担）
+  allTx.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary).forEach(t => {
+    if (t.beneficiary === 'girlfriend') allGfShouldPay += t.amount;
+    else if (t.beneficiary === 'boyfriend') allBfShouldPay += t.amount;
+  });
 
   const allBfToGf = allTx.filter(t=>t.type==='transfer'&&t.payer==='boyfriend' &&t.transferTo==='girlfriend').reduce((s,t)=>s+t.amount,0);
   const allGfToBf = allTx.filter(t=>t.type==='transfer'&&t.payer==='girlfriend'&&t.transferTo==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
@@ -443,11 +461,18 @@ function openModal() {
   setType('expense');
   setPayer('girlfriend');
   setTransferTo('boyfriend');
+  setBeneficiary('none');
   modalOverlay.classList.add('active');
   setTimeout(() => document.getElementById('input-amount').focus(), 300);
 }
 
 function closeModal() { modalOverlay.classList.remove('active'); }
+
+function updateBeneficiaryVisibility() {
+  const show = currentType === 'expense' && currentPayer === 'joint';
+  document.getElementById('beneficiary-group').style.display = show ? 'block' : 'none';
+  if (!show) setBeneficiary('none');
+}
 
 function setType(type) {
   currentType = type;
@@ -461,26 +486,33 @@ function setType(type) {
   const categoryGrp    = document.getElementById('category-group');
 
   if (type === 'transfer') {
-    // 振替元：全3択、振替先：全3択
     document.getElementById('payer-group').style.display = 'block';
     label.textContent        = '振替元';
     jointBtn.style.display   = '';
     transferToGrp.style.display = 'block';
     categoryGrp.style.display   = 'none';
   } else {
-    // expense — 全3択（共用財布含む）
     document.getElementById('payer-group').style.display = 'block';
     label.textContent        = '支出元';
     jointBtn.style.display   = '';
     transferToGrp.style.display = 'none';
     categoryGrp.style.display   = 'block';
   }
+  updateBeneficiaryVisibility();
 }
 
 function setPayer(payer) {
   currentPayer = payer;
   document.querySelectorAll('.payer-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.payer === payer);
+  });
+  updateBeneficiaryVisibility();
+}
+
+function setBeneficiary(ben) {
+  currentBeneficiary = ben;
+  document.querySelectorAll('.ben-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.ben === ben);
   });
 }
 
@@ -503,6 +535,9 @@ document.querySelectorAll('.payer-btn').forEach(btn => {
 });
 document.querySelectorAll('.transfer-to-btn').forEach(btn => {
   btn.addEventListener('click', () => setTransferTo(btn.dataset.to));
+});
+document.querySelectorAll('.ben-btn').forEach(btn => {
+  btn.addEventListener('click', () => setBeneficiary(btn.dataset.ben));
 });
 
 // ── 保存 ──────────────────────────────────────────
@@ -530,6 +565,9 @@ document.getElementById('btn-save').addEventListener('click', () => {
     date
   };
   if (currentType === 'transfer') tx.transferTo = currentTransferTo;
+  if (currentType === 'expense' && currentPayer === 'joint' && currentBeneficiary !== 'none') {
+    tx.beneficiary = currentBeneficiary;
+  }
 
   transactions.unshift(tx);
 
