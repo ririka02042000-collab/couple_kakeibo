@@ -121,19 +121,18 @@ function renderHome() {
   const txs = monthTx();
 
   // 彼女支出（支出 + 振替送金 − 振替受取）
+  // ※共用財布の立て替え分は返金(振替)されるまで共用財布の支出として扱うため含めない
   const gfExp        = txs.filter(t => t.payer === 'girlfriend' && t.type === 'expense').reduce((s,t) => s+t.amount, 0);
   const gfTransferOut = txs.filter(t => t.payer === 'girlfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
   const gfTransferIn  = txs.filter(t => t.transferTo === 'girlfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
-  // 共用財布払い個人支出
-  const jointPersonalForGf = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary === 'girlfriend').reduce((s,t) => s+t.amount, 0);
-  const gfTotal = gfExp + gfTransferOut - gfTransferIn + jointPersonalForGf;
+  const gfTotal = gfExp + gfTransferOut - gfTransferIn;
 
   // 彼氏支出（支出 + 振替送金 − 振替受取）
+  // ※共用財布の立て替え分は返金(振替)されるまで共用財布の支出として扱うため含めない
   const bfExp        = txs.filter(t => t.payer === 'boyfriend' && t.type === 'expense').reduce((s,t) => s+t.amount, 0);
   const bfTransferOut = txs.filter(t => t.payer === 'boyfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
   const bfTransferIn  = txs.filter(t => t.transferTo === 'boyfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
-  const jointPersonalForBf = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary === 'boyfriend').reduce((s,t) => s+t.amount, 0);
-  const bfTotal = bfExp + bfTransferOut - bfTransferIn + jointPersonalForBf;
+  const bfTotal = bfExp + bfTransferOut - bfTransferIn;
   // 共用財布残高（全期間）
   // 共用財布 残額（全期間）
   const allJointIn  = transactions.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
@@ -289,11 +288,11 @@ function renderSettle() {
     gfShouldPay -= t.amount * (Number(r.gfRatio)||1) / rt;
     bfShouldPay -= t.amount * (Number(r.bfRatio)||1) / rt;
   });
-  // 共用財布払い個人支出（100%その人の負担）
-  txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary).forEach(t => {
-    if (t.beneficiary === 'girlfriend') gfShouldPay += t.amount;
-    else if (t.beneficiary === 'boyfriend') bfShouldPay += t.amount;
-  });
+  // 共用財布払い個人支出（立て替え：100%その人の負担）
+  const monthJointPersonalGf = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary === 'girlfriend').reduce((s,t) => s+t.amount, 0);
+  const monthJointPersonalBf = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary === 'boyfriend').reduce((s,t) => s+t.amount, 0);
+  gfShouldPay += monthJointPersonalGf;
+  bfShouldPay += monthJointPersonalBf;
 
   // 差額（正 = 払いすぎ＝未回収、負 = 未払い）
   const netBfToGf = bfToGf - gfToBf;
@@ -329,6 +328,7 @@ function renderSettle() {
         <div class="bd-name">${settings.gfName}</div>
         <div class="bd-detail">
           支出 ${fmt(gfExp)}${gfToJoint>0?' / 財布入金 '+fmt(gfToJoint):''}${jointToGf>0?' / 財布出金 '+fmt(jointToGf):''}
+          ${monthJointPersonalGf>0?' / 共用立替 '+fmt(monthJointPersonalGf):''}
           ${netBfToGf!==0?' / 振替受取 '+fmt(netBfToGf):''}
         </div>
       </div>
@@ -342,6 +342,7 @@ function renderSettle() {
         <div class="bd-name">${settings.bfName}</div>
         <div class="bd-detail">
           支出 ${fmt(bfExp)}${bfToJoint>0?' / 財布入金 '+fmt(bfToJoint):''}${jointToBf>0?' / 財布出金 '+fmt(jointToBf):''}
+          ${monthJointPersonalBf>0?' / 共用立替 '+fmt(monthJointPersonalBf):''}
           ${netBfToGf!==0?' / 振替送金 '+fmt(netBfToGf):''}
         </div>
       </div>
