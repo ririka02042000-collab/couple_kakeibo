@@ -24,6 +24,20 @@ let settings = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":
 if (!settings.ratioHistory) {
   settings.ratioHistory = [{ from: '1970-01-01', gfRatio: settings.gfRatio || 1, bfRatio: settings.bfRatio || 1 }];
 }
+
+// 年別取引データ（遅延読み込み用）
+let transactionsByYear = {};          // { '2026': [tx,...], '2025': [tx,...] }
+transactions.forEach(tx => {
+  const y = tx.date?.slice(0,4); if (!y) return;
+  if (!transactionsByYear[y]) transactionsByYear[y] = [];
+  transactionsByYear[y].push(tx);
+});
+let loadedYears    = new Set();       // GitHub から取得済みの年
+let ghYearShas     = {};              // { '2026': 'sha...', ... }
+let availableYears = [];              // GitHub に存在する年一覧
+let ghSetSha       = null;
+let ghSyncTimers   = {};              // { year: timerID }
+
 let currentType        = 'expense';
 let currentPayer       = 'girlfriend';
 let currentTransferTo  = 'boyfriend';
@@ -45,11 +59,13 @@ const fmtDate = d => {
   return `${dt.getMonth()+1}/${dt.getDate()}`;
 };
 const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const save = () => {
+// affectedYear: 変更があった年（取引の追加・削除時）。設定のみの場合は null
+const save = (affectedYear) => {
   localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
   localStorage.setItem('couple_settings', JSON.stringify(settings));
-  writeTxToFile();         // File System Access API（接続中のみ）
-  scheduleSyncToGitHub();  // GitHub 自動同期（設定済みのみ・2秒後）
+  writeTxToFile();
+  if (affectedYear) scheduleSyncYearToGitHub(affectedYear);
+  scheduleSyncSettingsToGitHub();
 };
 
 // ── 割合取得（日付に対応した割合を返す）────────────────
@@ -492,12 +508,20 @@ function renderAll() {
 
 // ── タブ切り替え ──────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
-    if (btn.dataset.tab === 'history') renderHistory();
+    if (btn.dataset.tab === 'history') {
+      if (historyShowAll) await ensureAllYearsLoaded();
+      else await ensureYearLoaded(historyViewMonth.slice(0,4));
+      renderHistory();
+    }
+    if (btn.dataset.tab === 'settle') {
+      await ensureAllYearsLoaded();
+      renderSettle();
+    }
   });
 });
 
@@ -516,22 +540,25 @@ document.getElementById('next-month').addEventListener('click', () => {
 });
 
 // ── 月ナビ（履歴） ────────────────────────────────
-document.getElementById('history-all-btn').addEventListener('click', () => {
+document.getElementById('history-all-btn').addEventListener('click', async () => {
   historyShowAll = true;
+  await ensureAllYearsLoaded();
   renderHistory();
 });
-document.getElementById('history-prev-month').addEventListener('click', () => {
+document.getElementById('history-prev-month').addEventListener('click', async () => {
   historyShowAll = false;
   const d = new Date(historyViewMonth + '-01');
   d.setMonth(d.getMonth() - 1);
   historyViewMonth = d.toISOString().slice(0,7);
+  await ensureYearLoaded(historyViewMonth.slice(0,4));
   renderHistory();
 });
-document.getElementById('history-next-month').addEventListener('click', () => {
+document.getElementById('history-next-month').addEventListener('click', async () => {
   historyShowAll = false;
   const d = new Date(historyViewMonth + '-01');
   d.setMonth(d.getMonth() + 1);
   historyViewMonth = d.toISOString().slice(0,7);
+  await ensureYearLoaded(historyViewMonth.slice(0,4));
   renderHistory();
 });
 
@@ -665,9 +692,12 @@ document.getElementById('btn-save').addEventListener('click', () => {
   if (currentType === 'transfer') tx.transferTo = currentTransferTo;
   if (currentType === 'advance') tx.beneficiary = currentAdvanceTo;
 
+  const txYear = tx.date.slice(0,4);
+  if (!transactionsByYear[txYear]) transactionsByYear[txYear] = [];
+  transactionsByYear[txYear].unshift(tx);
   transactions.unshift(tx);
 
-  save();
+  save(txYear);
   renderAll();
   closeModal();
 });
@@ -676,8 +706,14 @@ document.getElementById('btn-save').addEventListener('click', () => {
 document.getElementById('history-tx-list').addEventListener('click', e => {
   const btn = e.target.closest('.tx-delete');
   if (btn && confirm('この取引を削除しますか？')) {
-    transactions = transactions.filter(t => t.id !== Number(btn.dataset.id));
-    save();
+    const delId   = Number(btn.dataset.id);
+    const delTx   = transactions.find(t => t.id === delId);
+    const delYear = delTx?.date?.slice(0,4);
+    if (delYear && transactionsByYear[delYear]) {
+      transactionsByYear[delYear] = transactionsByYear[delYear].filter(t => t.id !== delId);
+    }
+    transactions = transactions.filter(t => t.id !== delId);
+    save(delYear);
     renderAll();
   }
 });
@@ -744,19 +780,16 @@ document.getElementById('settings-save').addEventListener('click', () => {
   if (branch) ghConfig.branch = branch;
   saveGhConfig();
 
-  save();
+  save(null); // 設定のみ（取引ファイルは変更なし）
   applyNames();
   renderAll();
   settingsOverlay.classList.remove('active');
 });
 
-// ── GitHub API 連動 ───────────────────────────────
-let ghConfig   = JSON.parse(localStorage.getItem('kakeibo_gh') || 'null') || {};
-let ghTxSha    = null;   // 取引CSVファイルのSHA
-let ghSetSha   = null;   // 設定CSVファイルのSHA
-let ghSyncTimer = null;
+// ── GitHub API 連動（年別ファイル・遅延読み込み） ──
+let ghConfig = JSON.parse(localStorage.getItem('kakeibo_gh') || 'null') || {};
 
-const GH_TX_PATH  = 'kakeibo-history.csv';
+const ghYearPath  = year => `kakeibo-history-${year}.csv`;
 const GH_SET_PATH = 'kakeibo-settings.csv';
 
 function saveGhConfig() {
@@ -816,6 +849,69 @@ async function ghWrite(path, content, sha) {
   return res?.content?.sha || sha;
 }
 
+// transactions を transactionsByYear から再構築
+function rebuildTransactions() {
+  transactions = Object.values(transactionsByYear).flat();
+  transactions.sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+  localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
+}
+
+// GitHub ルートディレクトリを一覧して年別ファイルを検出
+async function listGhYearFiles() {
+  const ref   = encodeURIComponent(ghConfig.branch || 'main');
+  const files = await ghAPI(`?ref=${ref}`);
+  if (!Array.isArray(files)) return;
+  availableYears = [];
+  files.forEach(f => {
+    const m = f.name.match(/^kakeibo-history-(\d{4})\.csv$/);
+    if (m) {
+      availableYears.push(m[1]);
+      ghYearShas[m[1]] = f.sha;
+    }
+  });
+  availableYears.sort((a,b) => b.localeCompare(a)); // 新しい年が先
+}
+
+// 1年分のデータを GitHub から読み込む
+async function loadYearFromGitHub(year) {
+  if (loadedYears.has(year)) return;
+  const { content, sha } = await ghRead(ghYearPath(year));
+  ghYearShas[year]        = sha || ghYearShas[year];
+  transactionsByYear[year] = content ? parseTransactionsCsv(content) : [];
+  loadedYears.add(year);
+  rebuildTransactions();
+}
+
+// 指定年が未ロードなら読み込む
+async function ensureYearLoaded(year) {
+  if (!ghConfig.token || !ghConfig.repo) return;
+  if (!loadedYears.has(year)) {
+    updateGhStatus('syncing');
+    try {
+      await loadYearFromGitHub(year);
+      updateGhStatus('ok');
+    } catch(e) {
+      console.error('GitHub load error:', e);
+      updateGhStatus('error');
+    }
+  }
+}
+
+// 全年分をロード（精算タブ用）
+async function ensureAllYearsLoaded() {
+  if (!ghConfig.token || !ghConfig.repo) return;
+  const unloaded = availableYears.filter(y => !loadedYears.has(y));
+  if (!unloaded.length) return;
+  updateGhStatus('syncing');
+  try {
+    await Promise.all(unloaded.map(y => loadYearFromGitHub(y)));
+    updateGhStatus('ok');
+  } catch(e) {
+    console.error('GitHub load error:', e);
+    updateGhStatus('error');
+  }
+}
+
 // 設定CSVビルド・パース
 function buildSettingsCsv() {
   const lines = [
@@ -865,24 +961,25 @@ function updateGhStatus(state) {
   el.className   = `gh-sync-status ${s.cls}`;
 }
 
-// GitHubから読み込み（起動時）
+// GitHub から読み込み（起動時：当年のみ、他は遅延）
 async function syncFromGitHub() {
   if (!ghConfig.token || !ghConfig.repo) { updateGhStatus('none'); return; }
   updateGhStatus('syncing');
   try {
-    // 取引データ
-    const { content: txContent, sha: txSha } = await ghRead(GH_TX_PATH);
-    if (txContent) {
-      ghTxSha      = txSha;
-      transactions = parseTransactionsCsv(txContent);
-      localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
-    }
-    // 設定データ
+    // 年別ファイル一覧を取得
+    await listGhYearFiles();
+
+    // 当年データを読み込み
+    const currentYear = new Date().getFullYear().toString();
+    await loadYearFromGitHub(currentYear);
+
+    // 設定データを読み込み
     const { content: setContent, sha: setSha } = await ghRead(GH_SET_PATH);
     if (setContent) {
       ghSetSha = setSha;
       applySettingsFromCsv(setContent);
     }
+
     updateGhStatus('ok');
     renderAll();
   } catch(e) {
@@ -891,19 +988,33 @@ async function syncFromGitHub() {
   }
 }
 
-// GitHubへ書き込み（デバウンス付き・2秒後に実行）
-function scheduleSyncToGitHub() {
-  if (!ghConfig.token || !ghConfig.repo) return;
-  clearTimeout(ghSyncTimer);
-  ghSyncTimer = setTimeout(async () => {
+// 指定年のファイルを GitHub へ書き込む（デバウンス付き・2秒後）
+function scheduleSyncYearToGitHub(year) {
+  if (!ghConfig.token || !ghConfig.repo || !year) return;
+  clearTimeout(ghSyncTimers[year]);
+  ghSyncTimers[year] = setTimeout(async () => {
     updateGhStatus('syncing');
     try {
-      ghTxSha  = await ghWrite(GH_TX_PATH,  buildTransactionsCsv(transactions), ghTxSha);
-      ghSetSha = await ghWrite(GH_SET_PATH, buildSettingsCsv(),                 ghSetSha);
+      const yearTxs = transactionsByYear[year] || [];
+      ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
       updateGhStatus('ok');
     } catch(e) {
       console.error('GitHub write error:', e);
       updateGhStatus('error');
+    }
+  }, 2000);
+}
+
+// 設定のみ GitHub へ書き込む（デバウンス付き）
+let ghSetSyncTimer = null;
+function scheduleSyncSettingsToGitHub() {
+  if (!ghConfig.token || !ghConfig.repo) return;
+  clearTimeout(ghSetSyncTimer);
+  ghSetSyncTimer = setTimeout(async () => {
+    try {
+      ghSetSha = await ghWrite(GH_SET_PATH, buildSettingsCsv(), ghSetSha);
+    } catch(e) {
+      console.error('GitHub settings write error:', e);
     }
   }, 2000);
 }
