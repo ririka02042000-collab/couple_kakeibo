@@ -277,12 +277,23 @@
         <p class="ratio-hint">指定日以降の支出にこの割合を適用します</p>
       </div>
       <div class="form-group">
-        <label>📂 CSVデータ</label>
+        <label>📂 設定CSVバックアップ</label>
         <div class="csv-btn-row">
           <button class="btn-csv-export" id="settings-csv-export">↓ エクスポート</button>
           <label class="btn-csv-import" for="settings-csv-import">↑ インポート</label>
           <input type="file" id="settings-csv-import" accept=".csv" style="display:none">
         </div>
+      </div>
+      <div class="form-group github-section">
+        <label>🐙 GitHub 連動</label>
+        <div class="gh-status-row">
+          <span id="gh-sync-status" class="gh-sync-status gh-none">未設定</span>
+          <button id="gh-sync-now-btn" class="btn-gh-sync-now">今すぐ同期</button>
+        </div>
+        <input type="password" id="gh-token" placeholder="Personal Access Token" autocomplete="new-password">
+        <input type="text"     id="gh-repo"   placeholder="owner/repo （例: user/kakeibo）">
+        <input type="text"     id="gh-branch" placeholder="ブランチ （例: main）">
+        <p class="ratio-hint">トークンはこの端末のみに保存されます</p>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" id="settings-cancel">キャンセル</button>

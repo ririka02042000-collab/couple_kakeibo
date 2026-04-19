@@ -48,7 +48,8 @@ const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'
 const save = () => {
   localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
   localStorage.setItem('couple_settings', JSON.stringify(settings));
-  writeTxToFile(); // CSVファイルへ自動反映（非同期）
+  writeTxToFile();         // File System Access API（接続中のみ）
+  scheduleSyncToGitHub();  // GitHub 自動同期（設定済みのみ・2秒後）
 };
 
 // ── 割合取得（日付に対応した割合を返す）────────────────
@@ -695,8 +696,18 @@ document.getElementById('settings-btn').addEventListener('click', () => {
   document.getElementById('setting-ratio-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('setting-gf-ratio').value = '';
   document.getElementById('setting-bf-ratio').value = '';
+  // GitHub設定を表示（トークンはセキュリティのため非表示）
+  document.getElementById('gh-token').value  = ghConfig.token  ? '（設定済み）' : '';
+  document.getElementById('gh-repo').value   = ghConfig.repo   || '';
+  document.getElementById('gh-branch').value = ghConfig.branch || '';
   renderRatioHistory();
   settingsOverlay.classList.add('active');
+});
+
+document.getElementById('gh-sync-now-btn').addEventListener('click', syncFromGitHub);
+// トークン入力欄フォーカス時に「（設定済み）」をクリア
+document.getElementById('gh-token').addEventListener('focus', function() {
+  if (this.value === '（設定済み）') this.value = '';
 });
 
 document.getElementById('settings-cancel').addEventListener('click', () => {
@@ -717,20 +728,185 @@ document.getElementById('settings-save').addEventListener('click', () => {
 
   // 割合と日付が両方入力されている場合のみ追加
   if (gfR > 0 && bfR > 0 && date) {
-    // 同じ日付のエントリがあれば上書き
     settings.ratioHistory = settings.ratioHistory.filter(r => r.from !== date);
     settings.ratioHistory.push({ from: date, gfRatio: gfR, bfRatio: bfR });
-    // 入力をクリア
     document.getElementById('setting-gf-ratio').value = '';
     document.getElementById('setting-bf-ratio').value = '';
     document.getElementById('setting-ratio-date').value = '';
   }
+
+  // GitHub 設定を保存（トークンは入力がある場合のみ更新）
+  const token  = document.getElementById('gh-token').value.trim();
+  const repo   = document.getElementById('gh-repo').value.trim();
+  const branch = document.getElementById('gh-branch').value.trim();
+  if (token)  ghConfig.token  = token;
+  if (repo)   ghConfig.repo   = repo;
+  if (branch) ghConfig.branch = branch;
+  saveGhConfig();
 
   save();
   applyNames();
   renderAll();
   settingsOverlay.classList.remove('active');
 });
+
+// ── GitHub API 連動 ───────────────────────────────
+let ghConfig   = JSON.parse(localStorage.getItem('kakeibo_gh') || 'null') || {};
+let ghTxSha    = null;   // 取引CSVファイルのSHA
+let ghSetSha   = null;   // 設定CSVファイルのSHA
+let ghSyncTimer = null;
+
+const GH_TX_PATH  = 'kakeibo-history.csv';
+const GH_SET_PATH = 'kakeibo-settings.csv';
+
+function saveGhConfig() {
+  localStorage.setItem('kakeibo_gh', JSON.stringify(ghConfig));
+}
+
+// UTF-8 ⇔ Base64（日本語対応）
+function toB64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+function fromB64(b64) {
+  const bin   = atob(b64.replace(/\s/g, ''));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+// GitHub Contents API 共通処理
+async function ghAPI(path, opts = {}) {
+  const url = `https://api.github.com/repos/${ghConfig.repo}/contents/${path}`;
+  const res = await fetch(url, {
+    ...opts,
+    headers: {
+      'Authorization': `Bearer ${ghConfig.token}`,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(opts.headers || {})
+    }
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function ghRead(path) {
+  const ref  = encodeURIComponent(ghConfig.branch || 'main');
+  const data = await ghAPI(`${path}?ref=${ref}`);
+  if (!data) return { content: null, sha: null };
+  return { content: fromB64(data.content), sha: data.sha };
+}
+
+async function ghWrite(path, content, sha) {
+  const body = {
+    message: `update ${path}`,
+    content: toB64(content),
+    branch:  ghConfig.branch || 'main',
+  };
+  if (sha) body.sha = sha;
+  const res = await ghAPI(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return res?.content?.sha || sha;
+}
+
+// 設定CSVビルド・パース
+function buildSettingsCsv() {
+  const lines = [
+    'gfName,' + settings.gfName,
+    'bfName,' + settings.bfName,
+    'ratioFrom,gfRatio,bfRatio',
+  ];
+  [...settings.ratioHistory]
+    .sort((a,b) => a.from.localeCompare(b.from))
+    .forEach(r => lines.push(`${r.from},${r.gfRatio},${r.bfRatio}`));
+  return lines.join('\n');
+}
+
+function applySettingsFromCsv(text) {
+  text = text.replace(/^\ufeff/, '');
+  const lines = text.trim().split(/\r?\n/);
+  let ratioHeader = false;
+  const ratios = [];
+  lines.forEach(line => {
+    const parts = line.split(',');
+    if      (parts[0] === 'gfName')    settings.gfName = parts[1] || settings.gfName;
+    else if (parts[0] === 'bfName')    settings.bfName = parts[1] || settings.bfName;
+    else if (parts[0] === 'ratioFrom') ratioHeader = true;
+    else if (ratioHeader && parts.length >= 3) {
+      const gfR = parseFloat(parts[1]), bfR = parseFloat(parts[2]);
+      if (parts[0] && !isNaN(gfR) && !isNaN(bfR))
+        ratios.push({ from: parts[0], gfRatio: gfR, bfRatio: bfR });
+    }
+  });
+  if (ratios.length) settings.ratioHistory = ratios;
+  localStorage.setItem('couple_settings', JSON.stringify(settings));
+  applyNames();
+}
+
+// 同期ステータス表示
+function updateGhStatus(state) {
+  const el = document.getElementById('gh-sync-status');
+  if (!el) return;
+  const map = {
+    none:    { text: '未設定',      cls: 'gh-none'    },
+    syncing: { text: '⟳ 同期中…',  cls: 'gh-syncing' },
+    ok:      { text: '✓ 同期済み', cls: 'gh-ok'      },
+    error:   { text: '✕ エラー',   cls: 'gh-error'   },
+  };
+  const s = map[state] || map.none;
+  el.textContent = s.text;
+  el.className   = `gh-sync-status ${s.cls}`;
+}
+
+// GitHubから読み込み（起動時）
+async function syncFromGitHub() {
+  if (!ghConfig.token || !ghConfig.repo) { updateGhStatus('none'); return; }
+  updateGhStatus('syncing');
+  try {
+    // 取引データ
+    const { content: txContent, sha: txSha } = await ghRead(GH_TX_PATH);
+    if (txContent) {
+      ghTxSha      = txSha;
+      transactions = parseTransactionsCsv(txContent);
+      localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
+    }
+    // 設定データ
+    const { content: setContent, sha: setSha } = await ghRead(GH_SET_PATH);
+    if (setContent) {
+      ghSetSha = setSha;
+      applySettingsFromCsv(setContent);
+    }
+    updateGhStatus('ok');
+    renderAll();
+  } catch(e) {
+    console.error('GitHub sync error:', e);
+    updateGhStatus('error');
+  }
+}
+
+// GitHubへ書き込み（デバウンス付き・2秒後に実行）
+function scheduleSyncToGitHub() {
+  if (!ghConfig.token || !ghConfig.repo) return;
+  clearTimeout(ghSyncTimer);
+  ghSyncTimer = setTimeout(async () => {
+    updateGhStatus('syncing');
+    try {
+      ghTxSha  = await ghWrite(GH_TX_PATH,  buildTransactionsCsv(transactions), ghTxSha);
+      ghSetSha = await ghWrite(GH_SET_PATH, buildSettingsCsv(),                 ghSetSha);
+      updateGhStatus('ok');
+    } catch(e) {
+      console.error('GitHub write error:', e);
+      updateGhStatus('error');
+    }
+  }, 2000);
+}
 
 // ── ファイル連動（File System Access API） ────────
 let txFileHandle = null;
@@ -1029,4 +1205,5 @@ document.getElementById('logout-btn').addEventListener('click', () => {
 // ── 初期化 ────────────────────────────────────────
 applyNames();
 renderAll();
-initFileSync(); // CSVファイル連動を開始
+initFileSync();      // File System Access API（Chrome/Edge）
+syncFromGitHub();    // GitHub API（全ブラウザ対応）
