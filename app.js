@@ -197,7 +197,7 @@ function renderHistory() {
   const monthLabel = document.getElementById('history-month-label');
   if (historyShowAll) {
     allBtn.classList.add('active');
-    monthLabel.textContent = '';
+    monthLabel.textContent = '全期間';
   } else {
     allBtn.classList.remove('active');
     monthLabel.textContent = historyViewMonth.replace('-', '年') + '月';

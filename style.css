@@ -241,9 +241,11 @@ body {
   font-size: 0.78rem !important;
   font-weight: 700;
   color: var(--muted) !important;
-  padding: 4px 10px !important;
+  padding: 4px 14px !important;
   transition: all 0.2s;
   white-space: nowrap;
+  width: auto !important;
+  min-width: fit-content;
 }
 .history-month-all-btn.active {
   background: var(--joint) !important;
