@@ -731,6 +731,111 @@ document.getElementById('settings-save').addEventListener('click', () => {
   settingsOverlay.classList.remove('active');
 });
 
+// ── 取引CSV エクスポート ──────────────────────────
+document.getElementById('history-csv-export').addEventListener('click', () => {
+  const header = 'id,type,payer,amount,category,note,date,transferTo,beneficiary';
+  const rows = transactions
+    .slice()
+    .sort((a,b) => a.date.localeCompare(b.date) || a.id - b.id)
+    .map(t => [
+      t.id,
+      t.type,
+      t.payer,
+      t.amount,
+      t.category   || '',
+      '"' + (t.note || '').replace(/"/g, '""') + '"',
+      t.date,
+      t.transferTo  || '',
+      t.beneficiary || ''
+    ].join(','));
+
+  const csv  = [header, ...rows].join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'kakeibo-history.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── 取引CSV インポート ──────────────────────────
+document.getElementById('history-csv-import').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const text  = ev.target.result.replace(/^\ufeff/, '');
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length < 2) { alert('データがありません'); return; }
+
+      const headers = lines[0].split(',');
+      const idx = h => headers.indexOf(h);
+
+      // CSVの1行をフィールド配列にパース（ダブルクォート対応）
+      function parseCsvLine(line) {
+        const result = [];
+        let cur = '', inQ = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') {
+            if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+            else inQ = !inQ;
+          } else if (c === ',' && !inQ) {
+            result.push(cur); cur = '';
+          } else {
+            cur += c;
+          }
+        }
+        result.push(cur);
+        return result;
+      }
+
+      const imported = [];
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const cols = parseCsvLine(lines[i]);
+        const amount = parseInt(cols[idx('amount')]);
+        if (!amount || amount <= 0) continue;
+        const tx = {
+          id:          parseInt(cols[idx('id')]) || Date.now() + i,
+          type:        cols[idx('type')]        || 'expense',
+          payer:       cols[idx('payer')]       || 'girlfriend',
+          amount,
+          category:    cols[idx('category')]    || 'その他',
+          note:        cols[idx('note')]        || '',
+          date:        cols[idx('date')]        || '',
+        };
+        const transferTo  = cols[idx('transferTo')];
+        const beneficiary = cols[idx('beneficiary')];
+        if (transferTo)  tx.transferTo  = transferTo;
+        if (beneficiary) tx.beneficiary = beneficiary;
+        if (tx.date) imported.push(tx);
+      }
+
+      if (!imported.length) { alert('有効なデータがありませんでした'); return; }
+
+      if (!confirm(`${imported.length}件のデータをインポートします。\n既存データと重複するIDは上書きされます。続行しますか？`)) return;
+
+      // IDが被る既存データを削除してから追加
+      const importedIds = new Set(imported.map(t => t.id));
+      transactions = transactions.filter(t => !importedIds.has(t.id));
+      transactions = [...transactions, ...imported];
+      transactions.sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+
+      save();
+      renderAll();
+      alert(`${imported.length}件をインポートしました`);
+    } catch(err) {
+      alert('CSVの読み込みに失敗しました: ' + err.message);
+    }
+    e.target.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+
 // ── 設定CSV エクスポート ──────────────────────────
 document.getElementById('settings-csv-export').addEventListener('click', () => {
   const lines = [];

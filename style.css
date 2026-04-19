@@ -639,6 +639,11 @@ body {
   line-height: 1.4;
 }
 
+/* 履歴タブ CSV行 */
+.history-csv-row {
+  margin-bottom: 14px;
+}
+
 /* CSV エクスポート／インポート */
 .csv-btn-row {
   display: flex;
