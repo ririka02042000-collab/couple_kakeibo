@@ -39,12 +39,18 @@ let ghSetSha       = null;
 let ghSyncTimers   = {};              // { year: timerID }
 
 let currentType        = 'expense';
-let currentPayer       = 'girlfriend';
-let currentTransferTo  = 'boyfriend';
+let currentPayer       = 'joint';
+let currentTransferTo  = 'girlfriend';
 let currentBeneficiary = 'none';
 let currentAdvanceTo   = 'girlfriend';
-let viewMonth        = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-let historyViewMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+
+// ローカル時刻で YYYY-MM を返す（UTC変換による月ずれ防止）
+function localYearMonth() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+let viewMonth        = localYearMonth(); // "YYYY-MM"
+let historyViewMonth = localYearMonth(); // "YYYY-MM"
 let historyShowAll   = false; // 全期間表示フラグ（起動時は当月）
 
 // ── ユーティリティ ─────────────────────────────────
@@ -174,7 +180,6 @@ function renderHome() {
 
   document.getElementById('gf-amount').textContent      = fmt(gfTotal);
   document.getElementById('bf-amount').textContent      = fmt(bfTotal);
-  document.getElementById('joint-balance').textContent  = fmt(allJointIn - allJointOut);
   document.getElementById('joint-expense').textContent  = fmt(monthJointExp);
   document.getElementById('joint-in').textContent       = fmt(monthJointIn);
 
@@ -186,16 +191,53 @@ function renderHome() {
   const maxCat = catSorted[0]?.[1] || 1;
 
   const chartEl = document.getElementById('category-chart');
-  chartEl.innerHTML = catSorted.length ? catSorted.map(([cat, amt]) => `
-    <div class="category-row">
-      <span class="cat-icon">${CATEGORY_ICONS[cat]||'📦'}</span>
-      <span class="cat-name">${cat}</span>
-      <div class="cat-bar-wrap">
-        <div class="cat-bar" style="width:${(amt/maxCat*100).toFixed(1)}%"></div>
-      </div>
-      <span class="cat-amount">${fmt(amt)}</span>
-    </div>
-  `).join('') : '<p class="empty-chart">支出データなし</p>';
+  if (catSorted.length) {
+    chartEl.innerHTML = catSorted.map(([cat, amt], idx) => {
+      const catTxs = expTxs
+        .filter(t => t.category === cat)
+        .sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+      const detailHTML = catTxs.map(t => {
+        const pName = t.payer === 'girlfriend' ? settings.gfName
+                    : t.payer === 'boyfriend'  ? settings.bfName : '共用財布';
+        const pi = PAYER_INFO[t.payer] || PAYER_INFO.joint;
+        return `<div class="cat-detail-item">
+          <span class="cat-di-payer ${pi.class}">${pi.emoji}</span>
+          <div class="cat-di-info">
+            <div class="cat-di-note">${t.note ? escHtml(t.note) : escHtml(cat)}</div>
+            <div class="cat-di-meta">${fmtDate(t.date)} · ${escHtml(pName)}</div>
+          </div>
+          <span class="cat-di-amount">${fmt(t.amount)}</span>
+        </div>`;
+      }).join('');
+      return `
+        <div class="category-row" data-idx="${idx}">
+          <span class="cat-icon">${CATEGORY_ICONS[cat]||'📦'}</span>
+          <span class="cat-name">${escHtml(cat)}</span>
+          <div class="cat-bar-wrap">
+            <div class="cat-bar" style="width:${(amt/maxCat*100).toFixed(1)}%"></div>
+          </div>
+          <span class="cat-amount">${fmt(amt)}</span>
+          <span class="cat-expand-arrow">▶</span>
+        </div>
+        <div class="cat-detail" id="cat-detail-${idx}" style="display:none">${detailHTML}</div>
+      `;
+    }).join('');
+
+    // クリックで詳細アコーディオン
+    chartEl.querySelectorAll('.category-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx    = row.dataset.idx;
+        const detail = document.getElementById(`cat-detail-${idx}`);
+        const arrow  = row.querySelector('.cat-expand-arrow');
+        const isOpen = row.classList.contains('cat-expanded');
+        row.classList.toggle('cat-expanded', !isOpen);
+        detail.style.display = isOpen ? 'none' : 'block';
+        if (arrow) arrow.textContent = isOpen ? '▶' : '▼';
+      });
+    });
+  } else {
+    chartEl.innerHTML = '<p class="empty-chart">支出データなし</p>';
+  }
 
   // 最近5件
   const recent = txs.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id).slice(0,5);
@@ -579,12 +621,15 @@ const modalOverlay = document.getElementById('modal-overlay');
 function openModal() {
   document.getElementById('input-amount').value = '';
   document.getElementById('input-note').value = '';
-  document.getElementById('input-date').value = new Date().toISOString().slice(0,10);
+  // ローカル日付で今日をセット
+  const _d = new Date();
+  document.getElementById('input-date').value =
+    `${_d.getFullYear()}-${String(_d.getMonth()+1).padStart(2,'0')}-${String(_d.getDate()).padStart(2,'0')}`;
   setType('expense');
-  setPayer('girlfriend');
-  setTransferTo('boyfriend');
+  setPayer('joint');       // 左端：共用財布
+  setTransferTo('girlfriend'); // 左端：彼女
   setBeneficiary('none');
-  setAdvanceTo('girlfriend');
+  setAdvanceTo('girlfriend');  // 左端：彼女
   modalOverlay.classList.add('active');
   setTimeout(() => document.getElementById('input-amount').focus(), 300);
 }
@@ -1108,6 +1153,21 @@ function parseTransactionsCsv(text) {
   return result;
 }
 
+
+// ── 設定モーダル アコーディオン ──────────────────────
+[
+  { toggleId: 'ratio-add-toggle', bodyId: 'ratio-add-body' },
+  { toggleId: 'github-toggle',    bodyId: 'github-body'    },
+].forEach(({ toggleId, bodyId }) => {
+  const toggle = document.getElementById(toggleId);
+  const body   = document.getElementById(bodyId);
+  if (!toggle || !body) return;
+  toggle.addEventListener('click', () => {
+    const isOpen = toggle.classList.contains('open');
+    toggle.classList.toggle('open', !isOpen);
+    body.style.display = isOpen ? 'none' : 'block';
+  });
+});
 
 // ── ログアウト ────────────────────────────────────
 document.getElementById('logout-btn').addEventListener('click', () => {

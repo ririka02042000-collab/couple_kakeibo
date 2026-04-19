@@ -49,10 +49,9 @@
       </div>
       <div class="joint-card">
         <div class="joint-label">共用財布</div>
-        <div class="joint-balance" id="joint-balance">¥0</div>
         <div class="joint-sub">
-          <span>支出 <b id="joint-expense">¥0</b></span>
-          <span>入金 <b id="joint-in">¥0</b></span>
+          <span><span class="joint-sub-label">支出</span><b id="joint-expense">¥0</b></span>
+          <span><span class="joint-sub-label">入金</span><b id="joint-in">¥0</b></span>
         </div>
       </div>
       <div class="person-card boyfriend">
@@ -141,11 +140,11 @@
       <div class="form-group" id="payer-group">
         <label id="payer-group-label">支出元</label>
         <div class="payer-toggle">
-          <button class="payer-btn" data-payer="joint" id="payer-joint-btn">
+          <button class="payer-btn active" data-payer="joint" id="payer-joint-btn">
             <span class="payer-avatar">🏦</span>
             <span class="payer-name">共用財布</span>
           </button>
-          <button class="payer-btn active" data-payer="girlfriend">
+          <button class="payer-btn" data-payer="girlfriend">
             <span class="payer-avatar">👩</span>
             <span class="payer-name" id="payer-gf-label">彼女</span>
           </button>
@@ -175,7 +174,7 @@
       <div class="form-group" id="transfer-to-group" style="display:none">
         <label>振替先</label>
         <div class="payer-toggle">
-          <button class="transfer-to-btn" data-to="girlfriend">
+          <button class="transfer-to-btn active" data-to="girlfriend">
             <span class="payer-avatar">👩</span>
             <span class="payer-name" id="transfer-to-gf-label">彼女</span>
           </button>
@@ -232,7 +231,7 @@
 
   <!-- 設定モーダル -->
   <div class="modal-overlay" id="settings-overlay">
-    <div class="modal">
+    <div class="modal settings-modal">
       <div class="modal-handle"></div>
       <h2>設定</h2>
       <div class="form-group">
@@ -247,36 +246,50 @@
         <label>💰 支払い割合の履歴</label>
         <div class="ratio-history-list" id="ratio-history-list"></div>
       </div>
+
+      <!-- 新しい割合を追加（折りたたみ） -->
       <div class="form-group ratio-add-section">
-        <label>＋ 新しい割合を追加</label>
-        <div class="form-group" style="margin-bottom:8px">
-          <label style="font-size:0.72rem">適用開始日</label>
-          <input type="date" id="setting-ratio-date">
+        <div class="collapse-toggle" id="ratio-add-toggle">
+          <span>＋ 新しい割合を追加</span>
+          <span class="collapse-arrow">▶</span>
         </div>
-        <div class="ratio-row">
-          <div class="ratio-item">
-            <span class="ratio-person" id="ratio-gf-label">彼女</span>
-            <input type="number" id="setting-gf-ratio" placeholder="10000" min="0" inputmode="numeric">
+        <div class="collapse-body" id="ratio-add-body">
+          <div class="form-group" style="margin-bottom:8px;margin-top:8px">
+            <label style="font-size:0.72rem">適用開始日</label>
+            <input type="date" id="setting-ratio-date">
           </div>
-          <span class="ratio-colon">：</span>
-          <div class="ratio-item">
-            <span class="ratio-person" id="ratio-bf-label">彼氏</span>
-            <input type="number" id="setting-bf-ratio" placeholder="10000" min="0" inputmode="numeric">
+          <div class="ratio-row">
+            <div class="ratio-item">
+              <span class="ratio-person" id="ratio-gf-label">彼女</span>
+              <input type="number" id="setting-gf-ratio" placeholder="10000" min="0" inputmode="numeric">
+            </div>
+            <span class="ratio-colon">：</span>
+            <div class="ratio-item">
+              <span class="ratio-person" id="ratio-bf-label">彼氏</span>
+              <input type="number" id="setting-bf-ratio" placeholder="10000" min="0" inputmode="numeric">
+            </div>
           </div>
+          <p class="ratio-hint">指定日以降の支出にこの割合を適用します</p>
         </div>
-        <p class="ratio-hint">指定日以降の支出にこの割合を適用します</p>
       </div>
+
+      <!-- GitHub 連動（折りたたみ） -->
       <div class="form-group github-section">
-        <label>🐙 GitHub 連動</label>
-        <div class="gh-status-row">
-          <span id="gh-sync-status" class="gh-sync-status gh-none">未設定</span>
-          <button id="gh-sync-now-btn" class="btn-gh-sync-now">今すぐ同期</button>
+        <div class="collapse-toggle" id="github-toggle">
+          <span>🐙 GitHub 連動 <span id="gh-sync-status" class="gh-sync-status gh-none">未設定</span></span>
+          <span class="collapse-arrow">▶</span>
         </div>
-        <input type="password" id="gh-token" placeholder="Personal Access Token" autocomplete="new-password">
-        <input type="text"     id="gh-repo"   placeholder="owner/repo （例: user/kakeibo）">
-        <input type="text"     id="gh-branch" placeholder="ブランチ （例: main）">
-        <p class="ratio-hint">トークンはこの端末のみに保存されます</p>
+        <div class="collapse-body" id="github-body">
+          <div class="gh-status-row" style="margin-top:8px">
+            <button id="gh-sync-now-btn" class="btn-gh-sync-now">今すぐ同期</button>
+          </div>
+          <input type="password" id="gh-token" placeholder="Personal Access Token" autocomplete="new-password">
+          <input type="text"     id="gh-repo"   placeholder="owner/repo （例: user/kakeibo）">
+          <input type="text"     id="gh-branch" placeholder="ブランチ （例: main）">
+          <p class="ratio-hint">トークンはこの端末のみに保存されます</p>
+        </div>
       </div>
+
       <div class="modal-actions">
         <button class="btn-cancel" id="settings-cancel">キャンセル</button>
         <button class="btn-save" id="settings-save">保存</button>
