@@ -19,7 +19,7 @@ const TYPE_LABELS = {
 
 // ── 状態 ──────────────────────────────────────────
 let transactions = JSON.parse(localStorage.getItem('couple_kakeibo') || '[]');
-let settings = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":"彼女","bfName":"彼氏","ratioHistory":[{"from":"1970-01-01","gfRatio":1,"bfRatio":1}]}');
+let settings = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":"彼女","bfName":"彼氏","ratioHistory":[{"from":"1970-01-01","gfRatio":1,"bfRatio":1.2}]}');
 // 旧フォーマットからの移行
 if (!settings.ratioHistory) {
   settings.ratioHistory = [{ from: '1970-01-01', gfRatio: settings.gfRatio || 1, bfRatio: settings.bfRatio || 1 }];
