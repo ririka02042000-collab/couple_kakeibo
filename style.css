@@ -446,10 +446,10 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 12px 8px;
+  gap: 2px;
+  padding: 6px 8px;
   border: 2px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: white;
   cursor: pointer;
   transition: all 0.2s;
@@ -466,7 +466,7 @@ body {
 .ben-btn.active[data-ben="girlfriend"] { border-color: var(--gf);    background: var(--gf-light); }
 .ben-btn.active[data-ben="boyfriend"]  { border-color: var(--bf);    background: var(--bf-light); }
 
-.payer-avatar { font-size: 1.5rem; }
+.payer-avatar { font-size: 1.1rem; }
 .payer-name { font-size: 0.78rem; font-weight: 700; color: var(--text); }
 
 /* フォーム */
