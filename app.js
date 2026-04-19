@@ -269,12 +269,17 @@ function renderSettle() {
   // 按分額（各トランザクションを日付対応の割合で計算）
   let gfShouldPay = 0, bfShouldPay = 0;
 
-  // 個人支出
-  txs.filter(t => t.type === 'expense' && (t.payer === 'girlfriend' || t.payer === 'boyfriend')).forEach(t => {
+  // 個人支出（立て替えなし：割合で按分）
+  txs.filter(t => t.type === 'expense' && (t.payer === 'girlfriend' || t.payer === 'boyfriend') && !t.beneficiary).forEach(t => {
     const r = getRatioForDate(t.date);
     const rt = (Number(r.gfRatio)||1) + (Number(r.bfRatio)||1);
     gfShouldPay += t.amount * (Number(r.gfRatio)||1) / rt;
     bfShouldPay += t.amount * (Number(r.bfRatio)||1) / rt;
+  });
+  // 個人が相手の支出を立て替え（100%相手の負担）
+  txs.filter(t => t.type === 'expense' && (t.payer === 'girlfriend' || t.payer === 'boyfriend') && t.beneficiary).forEach(t => {
+    if (t.beneficiary === 'girlfriend') gfShouldPay += t.amount;
+    else if (t.beneficiary === 'boyfriend') bfShouldPay += t.amount;
   });
   // 共用財布への振替（各自が割合に応じて負担すべき）
   txs.filter(t => t.type === 'transfer' && t.transferTo === 'joint' && t.payer !== 'joint').forEach(t => {
@@ -367,12 +372,17 @@ function renderSettle() {
   const allBfActual  = allBfExp + allBfToJoint - allJointToBf;
 
   let allGfShouldPay = 0, allBfShouldPay = 0;
-  // 個人支出
-  allTx.filter(t => t.type === 'expense' && (t.payer === 'girlfriend' || t.payer === 'boyfriend')).forEach(t => {
+  // 個人支出（立て替えなし：割合で按分）
+  allTx.filter(t => t.type === 'expense' && (t.payer === 'girlfriend' || t.payer === 'boyfriend') && !t.beneficiary).forEach(t => {
     const r = getRatioForDate(t.date);
     const rt = (Number(r.gfRatio)||1) + (Number(r.bfRatio)||1);
     allGfShouldPay += t.amount * (Number(r.gfRatio)||1) / rt;
     allBfShouldPay += t.amount * (Number(r.bfRatio)||1) / rt;
+  });
+  // 個人が相手の支出を立て替え（100%相手の負担）
+  allTx.filter(t => t.type === 'expense' && (t.payer === 'girlfriend' || t.payer === 'boyfriend') && t.beneficiary).forEach(t => {
+    if (t.beneficiary === 'girlfriend') allGfShouldPay += t.amount;
+    else if (t.beneficiary === 'boyfriend') allBfShouldPay += t.amount;
   });
   // 共用財布への振替
   allTx.filter(t => t.type === 'transfer' && t.transferTo === 'joint' && t.payer !== 'joint').forEach(t => {
@@ -472,7 +482,7 @@ function openModal() {
 function closeModal() { modalOverlay.classList.remove('active'); }
 
 function updateBeneficiaryVisibility() {
-  const show = currentType === 'expense' && currentPayer === 'joint';
+  const show = currentType === 'expense';
   document.getElementById('beneficiary-group').style.display = show ? 'block' : 'none';
   if (!show) setBeneficiary('none');
 }
