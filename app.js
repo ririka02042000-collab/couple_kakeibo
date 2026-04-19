@@ -48,6 +48,7 @@ const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'
 const save = () => {
   localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
   localStorage.setItem('couple_settings', JSON.stringify(settings));
+  writeTxToFile(); // CSVファイルへ自動反映（非同期）
 };
 
 // ── 割合取得（日付に対応した割合を返す）────────────────
@@ -731,25 +732,213 @@ document.getElementById('settings-save').addEventListener('click', () => {
   settingsOverlay.classList.remove('active');
 });
 
-// ── 取引CSV エクスポート ──────────────────────────
-document.getElementById('history-csv-export').addEventListener('click', () => {
+// ── ファイル連動（File System Access API） ────────
+let txFileHandle = null;
+
+// IndexedDB にファイルハンドルを永続化
+function openHandleDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('kakeibo_fs', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+    req.onsuccess  = e => resolve(e.target.result);
+    req.onerror    = e => reject(e.target.error);
+  });
+}
+async function getStoredHandle(key) {
+  try {
+    const db = await openHandleDB();
+    return new Promise(resolve => {
+      const tx = db.transaction('handles', 'readonly');
+      tx.objectStore('handles').get(key).onsuccess = e => resolve(e.target.result || null);
+    });
+  } catch { return null; }
+}
+async function storeHandle(key, handle) {
+  try {
+    const db = await openHandleDB();
+    await new Promise(resolve => {
+      const tx = db.transaction('handles', 'readwrite');
+      tx.objectStore('handles').put(handle, key);
+      tx.oncomplete = resolve;
+    });
+  } catch { /* ignore */ }
+}
+
+// CSV ビルド
+function buildTransactionsCsv(txs) {
   const header = 'id,type,payer,amount,category,note,date,transferTo,beneficiary';
-  const rows = transactions
+  const rows = txs
     .slice()
     .sort((a,b) => a.date.localeCompare(b.date) || a.id - b.id)
     .map(t => [
-      t.id,
-      t.type,
-      t.payer,
-      t.amount,
-      t.category   || '',
+      t.id, t.type, t.payer, t.amount,
+      t.category    || '',
       '"' + (t.note || '').replace(/"/g, '""') + '"',
       t.date,
       t.transferTo  || '',
       t.beneficiary || ''
     ].join(','));
+  return [header, ...rows].join('\n');
+}
 
-  const csv  = [header, ...rows].join('\n');
+// CSV パース
+function parseCsvLine(line) {
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (c === ',' && !inQ) {
+      result.push(cur); cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+function parseTransactionsCsv(text) {
+  text = text.replace(/^\ufeff/, '');
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',');
+  const idx = h => headers.indexOf(h);
+  const result = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const cols  = parseCsvLine(lines[i]);
+    const amount = parseInt(cols[idx('amount')]);
+    if (!amount || amount <= 0) continue;
+    const tx = {
+      id:       parseInt(cols[idx('id')]) || Date.now() + i,
+      type:     cols[idx('type')]     || 'expense',
+      payer:    cols[idx('payer')]    || 'girlfriend',
+      amount,
+      category: cols[idx('category')] || 'その他',
+      note:     cols[idx('note')]     || '',
+      date:     cols[idx('date')]     || '',
+    };
+    const transferTo  = cols[idx('transferTo')];
+    const beneficiary = cols[idx('beneficiary')];
+    if (transferTo)  tx.transferTo  = transferTo;
+    if (beneficiary) tx.beneficiary = beneficiary;
+    if (tx.date) result.push(tx);
+  }
+  return result;
+}
+
+// ファイルへ書き込み（非同期・fire-and-forget）
+async function writeTxToFile() {
+  if (!txFileHandle) return;
+  try {
+    const writable = await txFileHandle.createWritable();
+    await writable.write('\ufeff' + buildTransactionsCsv(transactions));
+    await writable.close();
+  } catch(e) {
+    console.warn('CSV書き込み失敗:', e);
+  }
+}
+
+// 接続ステータス表示更新
+function updateFileSyncStatus(state, name) {
+  const el  = document.getElementById('file-sync-status');
+  const btn = document.getElementById('file-sync-btn');
+  if (state === 'connected') {
+    el.textContent = '🔗 ' + name;
+    el.className   = 'file-sync-status connected';
+    btn.textContent = '変更';
+  } else if (state === 'reconnect') {
+    el.textContent = '⚠ ' + name + '（再接続が必要）';
+    el.className   = 'file-sync-status reconnect';
+    btn.textContent = '再接続';
+  } else {
+    el.textContent = '未接続';
+    el.className   = 'file-sync-status disconnected';
+    btn.textContent = 'ファイルを選択';
+  }
+}
+
+// ファイル選択 → 接続
+async function selectTxFile() {
+  if (!window.showOpenFilePicker) {
+    alert('このブラウザはFile System Access APIに対応していません。\nChrome/Edgeをお使いください。');
+    return;
+  }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'CSV', accept: { 'text/csv': ['.csv'] } }],
+      multiple: false
+    });
+    txFileHandle = handle;
+    await storeHandle('transactions', handle);
+    const file = await handle.getFile();
+    const text = await file.text();
+    transactions = parseTransactionsCsv(text);
+    save(); // localStorageも更新
+    updateFileSyncStatus('connected', handle.name);
+    renderAll();
+  } catch { /* キャンセル時は何もしない */ }
+}
+
+// 起動時に保存済みハンドルを復元
+async function initFileSync() {
+  const btn = document.getElementById('file-sync-btn');
+
+  if (!window.showOpenFilePicker) {
+    updateFileSyncStatus('disconnected');
+    btn.addEventListener('click', selectTxFile);
+    return;
+  }
+
+  const handle = await getStoredHandle('transactions');
+  if (!handle) {
+    updateFileSyncStatus('disconnected');
+    btn.addEventListener('click', selectTxFile);
+    return;
+  }
+
+  try {
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') {
+      txFileHandle = handle;
+      const file = await handle.getFile();
+      const text = await file.text();
+      transactions = parseTransactionsCsv(text);
+      localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
+      updateFileSyncStatus('connected', handle.name);
+      renderAll();
+      btn.addEventListener('click', selectTxFile);
+    } else {
+      // ページ読み込み直後は requestPermission にユーザー操作が必要
+      updateFileSyncStatus('reconnect', handle.name);
+      btn.addEventListener('click', async function reconnectHandler() {
+        try {
+          const p = await handle.requestPermission({ mode: 'readwrite' });
+          if (p === 'granted') {
+            txFileHandle = handle;
+            const file = await handle.getFile();
+            const text = await file.text();
+            transactions = parseTransactionsCsv(text);
+            localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
+            updateFileSyncStatus('connected', handle.name);
+            renderAll();
+            btn.removeEventListener('click', reconnectHandler);
+            btn.addEventListener('click', selectTxFile);
+          }
+        } catch { /* ignore */ }
+      });
+    }
+  } catch {
+    updateFileSyncStatus('disconnected');
+    btn.addEventListener('click', selectTxFile);
+  }
+}
+
+// バックアップ（手動エクスポート）
+document.getElementById('history-csv-export').addEventListener('click', () => {
+  const csv  = buildTransactionsCsv(transactions);
   const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
@@ -757,83 +946,6 @@ document.getElementById('history-csv-export').addEventListener('click', () => {
   a.download = 'kakeibo-history.csv';
   a.click();
   URL.revokeObjectURL(url);
-});
-
-// ── 取引CSV インポート ──────────────────────────
-document.getElementById('history-csv-import').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const text  = ev.target.result.replace(/^\ufeff/, '');
-      const lines = text.trim().split(/\r?\n/);
-      if (lines.length < 2) { alert('データがありません'); return; }
-
-      const headers = lines[0].split(',');
-      const idx = h => headers.indexOf(h);
-
-      // CSVの1行をフィールド配列にパース（ダブルクォート対応）
-      function parseCsvLine(line) {
-        const result = [];
-        let cur = '', inQ = false;
-        for (let i = 0; i < line.length; i++) {
-          const c = line[i];
-          if (c === '"') {
-            if (inQ && line[i+1] === '"') { cur += '"'; i++; }
-            else inQ = !inQ;
-          } else if (c === ',' && !inQ) {
-            result.push(cur); cur = '';
-          } else {
-            cur += c;
-          }
-        }
-        result.push(cur);
-        return result;
-      }
-
-      const imported = [];
-      for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
-        const cols = parseCsvLine(lines[i]);
-        const amount = parseInt(cols[idx('amount')]);
-        if (!amount || amount <= 0) continue;
-        const tx = {
-          id:          parseInt(cols[idx('id')]) || Date.now() + i,
-          type:        cols[idx('type')]        || 'expense',
-          payer:       cols[idx('payer')]       || 'girlfriend',
-          amount,
-          category:    cols[idx('category')]    || 'その他',
-          note:        cols[idx('note')]        || '',
-          date:        cols[idx('date')]        || '',
-        };
-        const transferTo  = cols[idx('transferTo')];
-        const beneficiary = cols[idx('beneficiary')];
-        if (transferTo)  tx.transferTo  = transferTo;
-        if (beneficiary) tx.beneficiary = beneficiary;
-        if (tx.date) imported.push(tx);
-      }
-
-      if (!imported.length) { alert('有効なデータがありませんでした'); return; }
-
-      if (!confirm(`${imported.length}件のデータをインポートします。\n既存データと重複するIDは上書きされます。続行しますか？`)) return;
-
-      // IDが被る既存データを削除してから追加
-      const importedIds = new Set(imported.map(t => t.id));
-      transactions = transactions.filter(t => !importedIds.has(t.id));
-      transactions = [...transactions, ...imported];
-      transactions.sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
-
-      save();
-      renderAll();
-      alert(`${imported.length}件をインポートしました`);
-    } catch(err) {
-      alert('CSVの読み込みに失敗しました: ' + err.message);
-    }
-    e.target.value = '';
-  };
-  reader.readAsText(file, 'UTF-8');
 });
 
 // ── 設定CSV エクスポート ──────────────────────────
@@ -917,3 +1029,4 @@ document.getElementById('logout-btn').addEventListener('click', () => {
 // ── 初期化 ────────────────────────────────────────
 applyNames();
 renderAll();
+initFileSync(); // CSVファイル連動を開始

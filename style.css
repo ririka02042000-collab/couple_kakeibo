@@ -639,10 +639,67 @@ body {
   line-height: 1.4;
 }
 
-/* 履歴タブ CSV行 */
-.history-csv-row {
+/* ファイル連動バー */
+.file-sync-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
   margin-bottom: 14px;
 }
+
+.file-sync-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-sync-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.file-sync-status {
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.file-sync-status.connected    { color: var(--income); }
+.file-sync-status.disconnected { color: var(--muted); }
+.file-sync-status.reconnect    { color: #f59e0b; }
+
+.file-sync-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.file-sync-actions .btn-csv-export {
+  flex: 1;
+}
+
+.btn-file-sync {
+  flex: 1;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--joint);
+  border: none;
+  color: white;
+  transition: opacity 0.2s;
+}
+.btn-file-sync:hover { opacity: 0.8; }
 
 /* CSV エクスポート／インポート */
 .csv-btn-row {
