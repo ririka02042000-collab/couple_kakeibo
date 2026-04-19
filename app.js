@@ -485,12 +485,6 @@ function openModal() {
 
 function closeModal() { modalOverlay.classList.remove('active'); }
 
-function updateBeneficiaryVisibility() {
-  const show = currentType === 'expense';
-  document.getElementById('beneficiary-group').style.display = show ? 'block' : 'none';
-  if (!show) setBeneficiary('none');
-}
-
 function setType(type) {
   currentType = type;
   document.querySelectorAll('.type-btn').forEach(b => {
@@ -522,7 +516,6 @@ function setType(type) {
     advanceToGrp.style.display  = 'none';
     categoryGrp.style.display   = 'block';
   }
-  updateBeneficiaryVisibility();
 }
 
 function setPayer(payer) {
@@ -530,7 +523,6 @@ function setPayer(payer) {
   document.querySelectorAll('.payer-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.payer === payer);
   });
-  updateBeneficiaryVisibility();
 }
 
 function setBeneficiary(ben) {
@@ -604,9 +596,6 @@ document.getElementById('btn-save').addEventListener('click', () => {
   };
   if (currentType === 'transfer') tx.transferTo = currentTransferTo;
   if (currentType === 'advance') tx.beneficiary = currentAdvanceTo;
-  if (currentType === 'expense' && currentBeneficiary !== 'none') {
-    tx.beneficiary = currentBeneficiary;
-  }
 
   transactions.unshift(tx);
 
