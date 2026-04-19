@@ -975,6 +975,8 @@ document.getElementById('settings-save').addEventListener('click', () => {
 
 // ── GitHub API 連動（年別ファイル・遅延読み込み） ──
 let ghConfig = JSON.parse(localStorage.getItem('kakeibo_gh') || 'null') || {};
+// 過去バグで「（設定済み）」が保存されていた場合はリセット
+if (ghConfig.token === '（設定済み）') { ghConfig.token = ''; saveGhConfig(); }
 
 const ghYearPath  = year => `kakeibo-history-${year}.csv`;
 const GH_SET_PATH = 'kakeibo-settings.csv';
@@ -1059,9 +1061,9 @@ async function listGhYearFiles() {
   availableYears.sort((a,b) => b.localeCompare(a)); // 新しい年が先
 }
 
-// 1年分のデータを GitHub から読み込む
-async function loadYearFromGitHub(year) {
-  if (loadedYears.has(year)) return;
+// 1年分のデータを GitHub から読み込む（force=true で強制再読み込み）
+async function loadYearFromGitHub(year, force = false) {
+  if (!force && loadedYears.has(year)) return;
   const { content, sha } = await ghRead(ghYearPath(year));
   ghYearShas[year]        = sha || ghYearShas[year];
   transactionsByYear[year] = content ? parseTransactionsCsv(content) : [];
@@ -1133,8 +1135,8 @@ function applySettingsFromCsv(text) {
   applyNames();
 }
 
-// 同期ステータス表示
-function updateGhStatus(state) {
+// 同期ステータス表示（detail: HTTPステータスコードなど任意の補足）
+function updateGhStatus(state, detail) {
   const el = document.getElementById('gh-sync-status');
   if (!el) return;
   const map = {
@@ -1144,21 +1146,23 @@ function updateGhStatus(state) {
     error:   { text: '✕ エラー',   cls: 'gh-error'   },
   };
   const s = map[state] || map.none;
-  el.textContent = s.text;
+  el.textContent = detail ? `${s.text} ${detail}` : s.text;
   el.className   = `gh-sync-status ${s.cls}`;
 }
 
 // GitHub から読み込み（起動時：当年のみ、他は遅延）
 async function syncFromGitHub() {
-  if (!ghConfig.token || !ghConfig.repo) { updateGhStatus('none'); return; }
+  // トークン・リポジトリが未設定または不正な場合はスキップ
+  const hasValidToken = ghConfig.token && ghConfig.token !== '（設定済み）';
+  if (!hasValidToken || !ghConfig.repo) { updateGhStatus('none'); return; }
   updateGhStatus('syncing');
   try {
     // 年別ファイル一覧を取得
     await listGhYearFiles();
 
-    // 当年データを読み込み
+    // 当年データを強制再読み込み（キャッシュ無効）
     const currentYear = new Date().getFullYear().toString();
-    await loadYearFromGitHub(currentYear);
+    await loadYearFromGitHub(currentYear, true);
 
     // 設定データを読み込み
     const { content: setContent, sha: setSha } = await ghRead(GH_SET_PATH);
@@ -1169,11 +1173,14 @@ async function syncFromGitHub() {
 
     updateGhStatus('ok');
     updateCsvYearSelect();
-    renderAll();
   } catch(e) {
-    console.error('GitHub sync error:', e);
-    updateGhStatus('error');
+    // HTTPステータスを抽出して表示
+    const status = e.message?.match(/GitHub API (\d+)/)?.[1];
+    console.error('GitHub sync error:', e.message || e);
+    updateGhStatus('error', status);
   }
+  // 描画は同期の成否に関わらず実行（描画エラーを同期エラーと混同しない）
+  renderAll();
 }
 
 // 指定年のファイルを GitHub へ書き込む（デバウンス付き・2秒後）
