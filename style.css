@@ -253,6 +253,7 @@ body {
 }
 .tx-type-badge.expense  { background: #fee2e2; color: var(--expense); }
 .tx-type-badge.transfer { background: #fef3c7; color: #d97706; }
+.tx-type-badge.advance  { background: #d1fae5; color: #059669; }
 
 .tx-amount { font-size: 0.95rem; font-weight: 700; }
 .tx-amount.expense  { color: var(--expense); }
@@ -465,6 +466,10 @@ body {
 .ben-btn.active[data-ben="none"]       { border-color: var(--joint); background: var(--joint-light); }
 .ben-btn.active[data-ben="girlfriend"] { border-color: var(--gf);    background: var(--gf-light); }
 .ben-btn.active[data-ben="boyfriend"]  { border-color: var(--bf);    background: var(--bf-light); }
+
+.advance-to-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 8px; border: 2px solid var(--border); border-radius: 10px; background: white; cursor: pointer; transition: all 0.2s; }
+.advance-to-btn.active[data-to="girlfriend"] { border-color: var(--gf); background: var(--gf-light); }
+.advance-to-btn.active[data-to="boyfriend"]  { border-color: var(--bf); background: var(--bf-light); }
 
 .payer-avatar { font-size: 1.1rem; }
 .payer-name { font-size: 0.78rem; font-weight: 700; color: var(--text); }

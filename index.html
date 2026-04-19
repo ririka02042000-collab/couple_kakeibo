@@ -127,6 +127,7 @@
       <!-- 種別 -->
       <div class="type-toggle">
         <button class="type-btn active" data-type="expense">支出</button>
+        <button class="type-btn" data-type="advance">立替</button>
         <button class="type-btn" data-type="transfer">振替</button>
       </div>
 
@@ -164,6 +165,21 @@
           <button class="ben-btn" data-ben="boyfriend">
             <span class="payer-avatar">👨</span>
             <span class="payer-name" id="ben-bf-label">彼氏</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 立替先（立替タイプのみ表示） -->
+      <div class="form-group" id="advance-to-group" style="display:none">
+        <label>立替先</label>
+        <div class="payer-toggle">
+          <button class="advance-to-btn active" data-to="girlfriend">
+            <span class="payer-avatar">👩</span>
+            <span class="payer-name" id="advance-to-gf-label">彼女</span>
+          </button>
+          <button class="advance-to-btn" data-to="boyfriend">
+            <span class="payer-avatar">👨</span>
+            <span class="payer-name" id="advance-to-bf-label">彼氏</span>
           </button>
         </div>
       </div>
