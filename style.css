@@ -470,7 +470,7 @@ body {
 .payer-name { font-size: 0.78rem; font-weight: 700; color: var(--text); }
 
 /* フォーム */
-.form-group { margin-bottom: 14px; }
+.form-group { margin-bottom: 9px; }
 
 .form-group label {
   display: block;
