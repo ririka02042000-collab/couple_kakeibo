@@ -96,8 +96,10 @@ function applyNames() {
   document.getElementById('ratio-bf-label').textContent       = settings.bfName;
   document.getElementById('transfer-to-gf-label').textContent = settings.gfName;
   document.getElementById('transfer-to-bf-label').textContent = settings.bfName;
-  document.getElementById('ben-gf-label').textContent = settings.gfName;
-  document.getElementById('ben-bf-label').textContent = settings.bfName;
+  const benGf = document.getElementById('ben-gf-label');
+  const benBf = document.getElementById('ben-bf-label');
+  if (benGf) benGf.textContent = settings.gfName;
+  if (benBf) benBf.textContent = settings.bfName;
   document.getElementById('advance-to-gf-label').textContent = settings.gfName;
   document.getElementById('advance-to-bf-label').textContent = settings.bfName;
 
