@@ -421,10 +421,18 @@ function renderSettle() {
   const gfDiff = (gfActualPaid - gfShouldPay) - netBfToGf;
   const bfDiff = (bfActualPaid - bfShouldPay) + netBfToGf;
 
-  // 入金目標計算（割合の値が目標額）
+  // 入金額カード計算
+  // 片方でも超えたら両方の目標を次の倍数へ引き上げ
   const settleRatio = getRatioForDate(viewMonth + '-01');
-  const gfDepTarget = Number(settleRatio.gfRatio) || 0;
-  const bfDepTarget = Number(settleRatio.bfRatio) || 0;
+  const gfDepBase   = Number(settleRatio.gfRatio) || 0;
+  const bfDepBase   = Number(settleRatio.bfRatio) || 0;
+  let depMultiplier = 1;
+  while (
+    gfDepBase > 0 && bfDepBase > 0 &&
+    (gfToJoint > gfDepBase * depMultiplier || bfToJoint > bfDepBase * depMultiplier)
+  ) { depMultiplier++; }
+  const gfDepTarget = gfDepBase * depMultiplier;
+  const bfDepTarget = bfDepBase * depMultiplier;
   const gfDepRemain = Math.max(0, gfDepTarget - gfToJoint);
   const bfDepRemain = Math.max(0, bfDepTarget - bfToJoint);
 
@@ -459,15 +467,15 @@ function renderSettle() {
   bdEl.innerHTML = `
     <div class="breakdown-item deposit-target-item">
       <div class="bd-info">
-        <div class="bd-name">💳 今月の入金目標</div>
+        <div class="bd-name">💳 入金額</div>
         <div class="bd-detail" style="margin-top:4px">
-          ${settings.gfName}：入金済 ${fmt(gfToJoint)} ／ 目標 ${fmt(gfDepTarget)}
+          ${settings.gfName}：${fmt(gfToJoint)} ／ ${fmt(gfDepTarget)}
           ${gfDepRemain > 0
             ? `→ <b>あと ${fmt(gfDepRemain)}</b>`
             : `→ <b class="deposit-done">達成 ✓</b>`}
         </div>
         <div class="bd-detail" style="margin-top:4px">
-          ${settings.bfName}：入金済 ${fmt(bfToJoint)} ／ 目標 ${fmt(bfDepTarget)}
+          ${settings.bfName}：${fmt(bfToJoint)} ／ ${fmt(bfDepTarget)}
           ${bfDepRemain > 0
             ? `→ <b>あと ${fmt(bfDepRemain)}</b>`
             : `→ <b class="deposit-done">達成 ✓</b>`}
