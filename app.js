@@ -731,6 +731,76 @@ document.getElementById('settings-save').addEventListener('click', () => {
   settingsOverlay.classList.remove('active');
 });
 
+// ── 設定CSV エクスポート ──────────────────────────
+document.getElementById('settings-csv-export').addEventListener('click', () => {
+  const lines = [];
+  lines.push('gfName,' + settings.gfName);
+  lines.push('bfName,' + settings.bfName);
+  lines.push('ratioFrom,gfRatio,bfRatio');
+  [...settings.ratioHistory]
+    .sort((a,b) => a.from.localeCompare(b.from))
+    .forEach(r => lines.push(`${r.from},${r.gfRatio},${r.bfRatio}`));
+
+  const csv  = lines.join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'kakeibo-settings.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ── 設定CSV インポート ──────────────────────────
+document.getElementById('settings-csv-import').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const text  = ev.target.result.replace(/^\ufeff/, ''); // BOM除去
+      const lines = text.trim().split(/\r?\n/);
+      let ratioHeader = false;
+      const newRatios = [];
+      let newGfName = settings.gfName;
+      let newBfName = settings.bfName;
+
+      for (const line of lines) {
+        const parts = line.split(',');
+        if (parts[0] === 'gfName') {
+          newGfName = parts[1] || settings.gfName;
+        } else if (parts[0] === 'bfName') {
+          newBfName = parts[1] || settings.bfName;
+        } else if (parts[0] === 'ratioFrom') {
+          ratioHeader = true;
+        } else if (ratioHeader && parts.length >= 3) {
+          const gfR = parseFloat(parts[1]);
+          const bfR = parseFloat(parts[2]);
+          if (parts[0] && !isNaN(gfR) && !isNaN(bfR)) {
+            newRatios.push({ from: parts[0], gfRatio: gfR, bfRatio: bfR });
+          }
+        }
+      }
+
+      settings.gfName = newGfName;
+      settings.bfName = newBfName;
+      if (newRatios.length > 0) settings.ratioHistory = newRatios;
+
+      save();
+      applyNames();
+      renderAll();
+      document.getElementById('setting-gf-name').value = settings.gfName;
+      document.getElementById('setting-bf-name').value = settings.bfName;
+      alert('設定をインポートしました');
+    } catch {
+      alert('CSVの読み込みに失敗しました');
+    }
+    e.target.value = ''; // 同じファイルを再選択できるようリセット
+  };
+  reader.readAsText(file, 'UTF-8');
+});
+
 // ── ログアウト ────────────────────────────────────
 document.getElementById('logout-btn').addEventListener('click', () => {
   if (confirm('ログアウトしますか？')) {

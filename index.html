@@ -77,9 +77,9 @@
   <div class="tab-content" id="tab-history">
     <!-- 月選択 -->
     <div class="month-nav history-month-nav">
-      <button id="history-prev-month">‹</button>
       <button class="history-month-all-btn active" id="history-all-btn">全期間</button>
-      <span id="history-month-label"></span>
+      <button id="history-prev-month">‹</button>
+      <span id="history-month-label">全期間</span>
       <button id="history-next-month">›</button>
     </div>
     <div class="filter-bar">
@@ -265,6 +265,14 @@
           </div>
         </div>
         <p class="ratio-hint">指定日以降の支出にこの割合を適用します</p>
+      </div>
+      <div class="form-group">
+        <label>📂 CSVデータ</label>
+        <div class="csv-btn-row">
+          <button class="btn-csv-export" id="settings-csv-export">↓ エクスポート</button>
+          <label class="btn-csv-import" for="settings-csv-import">↑ インポート</label>
+          <input type="file" id="settings-csv-import" accept=".csv" style="display:none">
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn-cancel" id="settings-cancel">キャンセル</button>
