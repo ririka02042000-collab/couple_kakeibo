@@ -120,25 +120,27 @@ function renderHome() {
 
   const txs = monthTx();
 
-  // 彼女支出（支出 + 振替送金 − 振替受取）
-  // ※共用財布の立て替え分は返金(振替)されるまで共用財布の支出として扱うため含めない
+  // 共用財布による個人立て替え額（月次）
+  const jointPersonalForGf = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary === 'girlfriend').reduce((s,t) => s+t.amount, 0);
+  const jointPersonalForBf = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && t.beneficiary === 'boyfriend').reduce((s,t) => s+t.amount, 0);
+
+  // 彼女支出（支出 + 振替送金 − 振替受取 − 共用財布による立て替え）
   const gfExp        = txs.filter(t => t.payer === 'girlfriend' && t.type === 'expense').reduce((s,t) => s+t.amount, 0);
   const gfTransferOut = txs.filter(t => t.payer === 'girlfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
   const gfTransferIn  = txs.filter(t => t.transferTo === 'girlfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
-  const gfTotal = gfExp + gfTransferOut - gfTransferIn;
+  const gfTotal = gfExp + gfTransferOut - gfTransferIn - jointPersonalForGf;
 
-  // 彼氏支出（支出 + 振替送金 − 振替受取）
-  // ※共用財布の立て替え分は返金(振替)されるまで共用財布の支出として扱うため含めない
+  // 彼氏支出（支出 + 振替送金 − 振替受取 − 共用財布による立て替え）
   const bfExp        = txs.filter(t => t.payer === 'boyfriend' && t.type === 'expense').reduce((s,t) => s+t.amount, 0);
   const bfTransferOut = txs.filter(t => t.payer === 'boyfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
   const bfTransferIn  = txs.filter(t => t.transferTo === 'boyfriend' && t.type === 'transfer').reduce((s,t) => s+t.amount, 0);
-  const bfTotal = bfExp + bfTransferOut - bfTransferIn;
-  // 共用財布残高（全期間）
-  // 共用財布 残額（全期間）
+  const bfTotal = bfExp + bfTransferOut - bfTransferIn - jointPersonalForBf;
+
+  // 共用財布残高（全期間）※個人立て替えは除外
   const allJointIn  = transactions.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
-  const allJointOut = transactions.filter(t => (t.type === 'transfer' && t.payer === 'joint') || (t.payer === 'joint' && t.type === 'expense')).reduce((s,t)=>s+t.amount,0);
-  // その月の支出・入金（支出 + 振替出金、入金 + 振替入金）
-  const monthJointExpOnly  = txs.filter(t => t.payer === 'joint' && t.type === 'expense').reduce((s,t)=>s+t.amount,0);
+  const allJointOut = transactions.filter(t => (t.type === 'transfer' && t.payer === 'joint') || (t.payer === 'joint' && t.type === 'expense' && !t.beneficiary)).reduce((s,t)=>s+t.amount,0);
+  // その月の支出・入金（支出 + 振替出金 ※個人立て替えは除外）
+  const monthJointExpOnly  = txs.filter(t => t.payer === 'joint' && t.type === 'expense' && !t.beneficiary).reduce((s,t)=>s+t.amount,0);
   const monthJointTransOut = txs.filter(t => t.payer === 'joint' && t.type === 'transfer').reduce((s,t)=>s+t.amount,0);
   const monthJointExp = monthJointExpOnly + monthJointTransOut;
   const monthJointIn  = txs.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
