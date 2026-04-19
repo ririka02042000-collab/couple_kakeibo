@@ -382,18 +382,22 @@ body {
 .tx-amount.deposit  { color: var(--joint); }
 .tx-amount.transfer { color: #f59e0b; }
 
+.tx-actions { display: flex; gap: 4px; align-items: center; }
+
+.tx-edit,
 .tx-delete {
   background: none;
   border: none;
   color: #d1d5db;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 2px 5px;
   border-radius: 6px;
   transition: color 0.2s, background 0.2s;
   line-height: 1;
 }
 
+.tx-edit:hover   { color: var(--joint);   background: var(--joint-light); }
 .tx-delete:hover { color: var(--expense); background: #fee2e2; }
 
 /* フィルターバー */
@@ -454,6 +458,13 @@ body {
   background: var(--joint-light);
   border-left: 3px solid var(--joint);
 }
+
+/* 入金目標カード */
+.deposit-target-item {
+  background: #f0fdf4;
+  border-left: 3px solid var(--income);
+}
+.deposit-done { color: var(--income); }
 
 /* 追加ボタン */
 .add-btn {
@@ -793,6 +804,42 @@ body {
   transition: opacity 0.2s;
 }
 .btn-gh-sync-now:hover { opacity: 0.75; }
+
+/* CSVダウンロードバー */
+.csv-dl-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.csv-year-sel {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: white;
+  font-size: 0.85rem;
+  color: var(--text);
+  outline: none;
+}
+.csv-year-sel:focus { border-color: var(--joint); }
+
+.btn-csv-dl {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 10px;
+  background: var(--joint-light);
+  color: var(--joint);
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.btn-csv-dl:hover { opacity: 0.75; }
 
 /* モーダルアクション */
 .modal-actions {

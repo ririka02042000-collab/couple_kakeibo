@@ -19,7 +19,7 @@ const TYPE_LABELS = {
 
 // ── 状態 ──────────────────────────────────────────
 let transactions = JSON.parse(localStorage.getItem('couple_kakeibo') || '[]');
-let settings = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":"彼女","bfName":"彼氏","ratioHistory":[{"from":"1970-01-01","gfRatio":1,"bfRatio":1.2}]}');
+let settings = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":"彼女","bfName":"彼氏","ratioHistory":[{"from":"1970-01-01","gfRatio":10000,"bfRatio":12000}]}');
 // 旧フォーマットからの移行
 if (!settings.ratioHistory) {
   settings.ratioHistory = [{ from: '1970-01-01', gfRatio: settings.gfRatio || 1, bfRatio: settings.bfRatio || 1 }];
@@ -52,6 +52,7 @@ function localYearMonth() {
 let viewMonth        = localYearMonth(); // "YYYY-MM"
 let historyViewMonth = localYearMonth(); // "YYYY-MM"
 let historyShowAll   = false; // 全期間表示フラグ（起動時は当月）
+let editingTxId      = null;  // 編集中の取引ID（nullなら新規追加）
 
 // ── ユーティリティ ─────────────────────────────────
 const fmt  = n  => '¥' + Math.abs(n).toLocaleString('ja-JP');
@@ -308,7 +309,7 @@ function buildTxItem(t, showDelete) {
     <div class="tx-right">
       <div class="tx-type-badge ${t.type}">${t.type === 'transfer' ? '振替' : t.type === 'advance' ? '立替' : '支出'}</div>
       <div class="tx-amount ${t.type}">${sign(t.type, t.amount)}</div>
-      ${showDelete ? `<button class="tx-delete" data-id="${t.id}">✕</button>` : ''}
+      ${showDelete ? `<div class="tx-actions"><button class="tx-edit" data-id="${t.id}" title="編集">✏</button><button class="tx-delete" data-id="${t.id}" title="削除">✕</button></div>` : ''}
     </div>
   `;
   return item;
@@ -420,6 +421,17 @@ function renderSettle() {
   const gfDiff = (gfActualPaid - gfShouldPay) - netBfToGf;
   const bfDiff = (bfActualPaid - bfShouldPay) + netBfToGf;
 
+  // 入金目標計算（割合の値が目標額）
+  const settleRatio = getRatioForDate(viewMonth + '-01');
+  const gfDepTarget = Number(settleRatio.gfRatio) || 0;
+  const bfDepTarget = Number(settleRatio.bfRatio) || 0;
+  const gfDepRemain = Math.max(0, gfDepTarget - gfToJoint);
+  const bfDepRemain = Math.max(0, bfDepTarget - bfToJoint);
+
+  // 相手への立替額（自分が相手の個人費用を立替払い）
+  const gfAdvForBf = txs.filter(t => t.type === 'advance' && t.payer === 'girlfriend' && t.beneficiary === 'boyfriend').reduce((s,t) => s+t.amount, 0);
+  const bfAdvForGf = txs.filter(t => t.type === 'advance' && t.payer === 'boyfriend'  && t.beneficiary === 'girlfriend').reduce((s,t) => s+t.amount, 0);
+
   // 割合ラベル
   const allSettleTxs = txs.filter(t =>
     (t.type === 'expense' && (t.payer === 'girlfriend' || t.payer === 'boyfriend')) ||
@@ -431,9 +443,37 @@ function renderSettle() {
       ? (() => { const r = getRatioForDate(allSettleTxs[0].date); return `（${settings.gfName} ${r.gfRatio} : ${settings.bfName} ${r.bfRatio}）`; })()
       : '（複数の割合を適用）';
 
+  // 各人の詳細テキスト（支出 / 財布からの返金 / 相手への立替）
+  const gfDetailParts = [];
+  if (gfExp > 0)      gfDetailParts.push(`支出 ${fmt(gfExp)}`);
+  if (jointToGf > 0)  gfDetailParts.push(`財布からの返金 ${fmt(jointToGf)}`);
+  if (gfAdvForBf > 0) gfDetailParts.push(`${settings.bfName}の立替 ${fmt(gfAdvForBf)}`);
+
+  const bfDetailParts = [];
+  if (bfExp > 0)      bfDetailParts.push(`支出 ${fmt(bfExp)}`);
+  if (jointToBf > 0)  bfDetailParts.push(`財布からの返金 ${fmt(jointToBf)}`);
+  if (bfAdvForGf > 0) bfDetailParts.push(`${settings.gfName}の立替 ${fmt(bfAdvForGf)}`);
+
   // 内訳描画
   const bdEl = document.getElementById('breakdown-list');
   bdEl.innerHTML = `
+    <div class="breakdown-item deposit-target-item">
+      <div class="bd-info">
+        <div class="bd-name">💳 今月の入金目標</div>
+        <div class="bd-detail" style="margin-top:4px">
+          ${settings.gfName}：入金済 ${fmt(gfToJoint)} ／ 目標 ${fmt(gfDepTarget)}
+          ${gfDepRemain > 0
+            ? `→ <b>あと ${fmt(gfDepRemain)}</b>`
+            : `→ <b class="deposit-done">達成 ✓</b>`}
+        </div>
+        <div class="bd-detail" style="margin-top:4px">
+          ${settings.bfName}：入金済 ${fmt(bfToJoint)} ／ 目標 ${fmt(bfDepTarget)}
+          ${bfDepRemain > 0
+            ? `→ <b>あと ${fmt(bfDepRemain)}</b>`
+            : `→ <b class="deposit-done">達成 ✓</b>`}
+        </div>
+      </div>
+    </div>
     <div class="breakdown-item ratio-info-item">
       <div class="bd-avatar">⚖️</div>
       <div class="bd-info">
@@ -447,11 +487,7 @@ function renderSettle() {
     <div class="breakdown-item">
       <div class="bd-info">
         <div class="bd-name">${settings.gfName}</div>
-        <div class="bd-detail">
-          支出 ${fmt(gfExp)}${gfToJoint>0?' / 財布入金 '+fmt(gfToJoint):''}${jointToGf>0?' / 財布出金 '+fmt(jointToGf):''}
-          ${monthJointPersonalGf>0?' / 共用立替 '+fmt(monthJointPersonalGf):''}
-          ${netBfToGf!==0?' / 振替受取 '+fmt(netBfToGf):''}
-        </div>
+        <div class="bd-detail">${gfDetailParts.join(' / ') || '取引なし'}</div>
       </div>
       <div class="bd-amount ${gfDiff>=0?'positive':'negative'}">
         ${gfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(gfDiff)))}
@@ -461,11 +497,7 @@ function renderSettle() {
     <div class="breakdown-item">
       <div class="bd-info">
         <div class="bd-name">${settings.bfName}</div>
-        <div class="bd-detail">
-          支出 ${fmt(bfExp)}${bfToJoint>0?' / 財布入金 '+fmt(bfToJoint):''}${jointToBf>0?' / 財布出金 '+fmt(jointToBf):''}
-          ${monthJointPersonalBf>0?' / 共用立替 '+fmt(monthJointPersonalBf):''}
-          ${netBfToGf!==0?' / 振替送金 '+fmt(netBfToGf):''}
-        </div>
+        <div class="bd-detail">${bfDetailParts.join(' / ') || '取引なし'}</div>
       </div>
       <div class="bd-amount ${bfDiff<=0?'negative':'positive'}">
         ${bfDiff<=0?'▽':'△'}${fmt(Math.round(Math.abs(bfDiff)))}
@@ -551,6 +583,36 @@ function renderAll() {
   renderSettle();
 }
 
+// ── CSV ダウンロード ───────────────────────────────
+function updateCsvYearSelect() {
+  const sel = document.getElementById('csv-year-select');
+  if (!sel) return;
+  const years = new Set([...availableYears, ...Object.keys(transactionsByYear)]);
+  const sorted = [...years].filter(Boolean).sort((a,b) => b.localeCompare(a));
+  const curYear = localYearMonth().slice(0,4);
+  if (!sorted.length) sorted.push(curYear);
+  sel.innerHTML = sorted.map(y =>
+    `<option value="${y}"${y===curYear?' selected':''}>${y}年</option>`
+  ).join('');
+}
+
+document.getElementById('csv-dl-btn').addEventListener('click', async () => {
+  const year = document.getElementById('csv-year-select').value;
+  if (!year) return;
+  await ensureYearLoaded(year);
+  const yearTxs = transactionsByYear[year] || [];
+  const csv  = '\uFEFF' + buildTransactionsCsv(yearTxs); // BOM付き（Excel対応）
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = `kakeibo-history-${year}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
 // ── タブ切り替え ──────────────────────────────────
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', async () => {
@@ -561,6 +623,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     if (btn.dataset.tab === 'history') {
       if (historyShowAll) await ensureAllYearsLoaded();
       else await ensureYearLoaded(historyViewMonth.slice(0,4));
+      updateCsvYearSelect();
       renderHistory();
     }
     if (btn.dataset.tab === 'settle') {
@@ -638,7 +701,11 @@ function openModal() {
   setTimeout(() => document.getElementById('input-amount').focus(), 300);
 }
 
-function closeModal() { modalOverlay.classList.remove('active'); }
+function closeModal() {
+  editingTxId = null;
+  document.querySelector('#modal-overlay h2').textContent = '取引を追加';
+  modalOverlay.classList.remove('active');
+}
 
 function setType(type) {
   currentType = type;
@@ -721,7 +788,7 @@ document.querySelectorAll('.advance-to-btn').forEach(btn => {
   btn.addEventListener('click', () => setAdvanceTo(btn.dataset.to));
 });
 
-// ── 保存 ──────────────────────────────────────────
+// ── 保存（新規追加 / 編集共通） ──────────────────────
 document.getElementById('btn-save').addEventListener('click', () => {
   const amount = parseInt(document.getElementById('input-amount').value);
   const date   = document.getElementById('input-date').value;
@@ -730,43 +797,92 @@ document.getElementById('btn-save').addEventListener('click', () => {
 
   if (!amount || amount <= 0) { alert('金額を入力してください'); return; }
   if (!date) { alert('日付を入力してください'); return; }
-
   if (currentType === 'transfer' && currentPayer === currentTransferTo) {
-    alert('振替元と振替先が同じです');
-    return;
+    alert('振替元と振替先が同じです'); return;
   }
   if (currentType === 'advance' && currentPayer !== 'joint' && currentPayer === currentAdvanceTo) {
-    alert('立替元と立替先が同じです');
-    return;
+    alert('立替元と立替先が同じです'); return;
   }
 
-  const tx = {
-    id: Date.now(),
-    type: currentType,
-    payer: currentPayer,
+  const txData = {
+    type:     currentType,
+    payer:    currentPayer,
     amount,
     category: currentType === 'transfer' ? '振替' : cat,
     note,
-    date
+    date,
   };
-  if (currentType === 'transfer') tx.transferTo = currentTransferTo;
-  if (currentType === 'advance') tx.beneficiary = currentAdvanceTo;
+  if (currentType === 'transfer') txData.transferTo  = currentTransferTo;
+  if (currentType === 'advance')  txData.beneficiary = currentAdvanceTo;
 
-  const txYear = tx.date.slice(0,4);
-  if (!transactionsByYear[txYear]) transactionsByYear[txYear] = [];
-  transactionsByYear[txYear].unshift(tx);
-  transactions.unshift(tx);
+  if (editingTxId !== null) {
+    // ── 編集モード ──
+    const oldTx   = transactions.find(t => t.id === editingTxId);
+    const oldYear = oldTx?.date?.slice(0,4);
+    const newYear = date.slice(0,4);
+    const updTx   = { id: editingTxId, ...txData };
 
-  save(txYear);
+    // 古い年から除去
+    if (oldYear && transactionsByYear[oldYear]) {
+      transactionsByYear[oldYear] = transactionsByYear[oldYear].filter(t => t.id !== editingTxId);
+    }
+    transactions = transactions.filter(t => t.id !== editingTxId);
+
+    // 新しい年に追加
+    if (!transactionsByYear[newYear]) transactionsByYear[newYear] = [];
+    transactionsByYear[newYear].unshift(updTx);
+    transactions.unshift(updTx);
+
+    save(newYear);
+    if (oldYear && oldYear !== newYear) save(oldYear);
+  } else {
+    // ── 新規追加モード ──
+    const tx     = { id: Date.now(), ...txData };
+    const txYear = tx.date.slice(0,4);
+    if (!transactionsByYear[txYear]) transactionsByYear[txYear] = [];
+    transactionsByYear[txYear].unshift(tx);
+    transactions.unshift(tx);
+    save(txYear);
+  }
+
   renderAll();
   closeModal();
 });
 
-// ── 削除（履歴） ──────────────────────────────────
+// ── 編集モーダルを開く ────────────────────────────
+function openEditModal(txId) {
+  const tx = transactions.find(t => t.id === txId);
+  if (!tx) return;
+  editingTxId = txId;
+
+  document.getElementById('input-amount').value = tx.amount;
+  document.getElementById('input-note').value   = tx.note || '';
+  document.getElementById('input-date').value   = tx.date;
+  setType(tx.type);
+  setPayer(tx.payer);
+  if (tx.type === 'transfer') setTransferTo(tx.transferTo  || 'girlfriend');
+  if (tx.type === 'advance')  setAdvanceTo(tx.beneficiary  || 'girlfriend');
+
+  const catSel = document.getElementById('input-category');
+  if (tx.category && [...catSel.options].some(o => o.value === tx.category)) {
+    catSel.value = tx.category;
+  }
+
+  document.querySelector('#modal-overlay h2').textContent = '取引を編集';
+  modalOverlay.classList.add('active');
+  setTimeout(() => document.getElementById('input-amount').focus(), 300);
+}
+
+// ── 編集・削除（履歴） ────────────────────────────
 document.getElementById('history-tx-list').addEventListener('click', e => {
-  const btn = e.target.closest('.tx-delete');
-  if (btn && confirm('この取引を削除しますか？')) {
-    const delId   = Number(btn.dataset.id);
+  const editBtn = e.target.closest('.tx-edit');
+  if (editBtn) {
+    openEditModal(Number(editBtn.dataset.id));
+    return;
+  }
+  const delBtn = e.target.closest('.tx-delete');
+  if (delBtn && confirm('この取引を削除しますか？')) {
+    const delId   = Number(delBtn.dataset.id);
     const delTx   = transactions.find(t => t.id === delId);
     const delYear = delTx?.date?.slice(0,4);
     if (delYear && transactionsByYear[delYear]) {
@@ -1044,6 +1160,7 @@ async function syncFromGitHub() {
     }
 
     updateGhStatus('ok');
+    updateCsvYearSelect();
     renderAll();
   } catch(e) {
     console.error('GitHub sync error:', e);
