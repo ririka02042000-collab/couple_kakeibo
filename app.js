@@ -782,11 +782,11 @@ document.getElementById('settings-save').addEventListener('click', () => {
     document.getElementById('setting-ratio-date').value = '';
   }
 
-  // GitHub 設定を保存（トークンは入力がある場合のみ更新）
+  // GitHub 設定を保存（トークンは入力がある場合のみ更新。「設定済み」プレースホルダは除外）
   const token  = document.getElementById('gh-token').value.trim();
   const repo   = document.getElementById('gh-repo').value.trim();
   const branch = document.getElementById('gh-branch').value.trim();
-  if (token)  ghConfig.token  = token;
+  if (token && token !== '（設定済み）') ghConfig.token = token;
   if (repo)   ghConfig.repo   = repo;
   if (branch) ghConfig.branch = branch;
   saveGhConfig();
@@ -795,6 +795,9 @@ document.getElementById('settings-save').addEventListener('click', () => {
   applyNames();
   renderAll();
   settingsOverlay.classList.remove('active');
+
+  // 設定保存後に自動で同期開始
+  if (ghConfig.token && ghConfig.repo) syncFromGitHub();
 });
 
 // ── GitHub API 連動（年別ファイル・遅延読み込み） ──
@@ -1006,6 +1009,11 @@ function scheduleSyncYearToGitHub(year) {
   ghSyncTimers[year] = setTimeout(async () => {
     updateGhStatus('syncing');
     try {
+      // sha が未取得の場合は先に読んで取得（既存ファイルへの上書きに必要）
+      if (!ghYearShas[year]) {
+        const { sha } = await ghRead(ghYearPath(year));
+        if (sha) ghYearShas[year] = sha;
+      }
       const yearTxs = transactionsByYear[year] || [];
       ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
       updateGhStatus('ok');
@@ -1023,6 +1031,11 @@ function scheduleSyncSettingsToGitHub() {
   clearTimeout(ghSetSyncTimer);
   ghSetSyncTimer = setTimeout(async () => {
     try {
+      // sha が未取得の場合は先に読んで取得（既存ファイルへの上書きに必要）
+      if (!ghSetSha) {
+        const { sha } = await ghRead(GH_SET_PATH);
+        if (sha) ghSetSha = sha;
+      }
       ghSetSha = await ghWrite(GH_SET_PATH, buildSettingsCsv(), ghSetSha);
     } catch(e) {
       console.error('GitHub settings write error:', e);
