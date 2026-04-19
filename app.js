@@ -63,7 +63,6 @@ const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'
 const save = (affectedYear) => {
   localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
   localStorage.setItem('couple_settings', JSON.stringify(settings));
-  writeTxToFile();
   if (affectedYear) scheduleSyncYearToGitHub(affectedYear);
   scheduleSyncSettingsToGitHub();
 };
@@ -1019,39 +1018,7 @@ function scheduleSyncSettingsToGitHub() {
   }, 2000);
 }
 
-// ── ファイル連動（File System Access API） ────────
-let txFileHandle = null;
-
-// IndexedDB にファイルハンドルを永続化
-function openHandleDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('kakeibo_fs', 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
-    req.onsuccess  = e => resolve(e.target.result);
-    req.onerror    = e => reject(e.target.error);
-  });
-}
-async function getStoredHandle(key) {
-  try {
-    const db = await openHandleDB();
-    return new Promise(resolve => {
-      const tx = db.transaction('handles', 'readonly');
-      tx.objectStore('handles').get(key).onsuccess = e => resolve(e.target.result || null);
-    });
-  } catch { return null; }
-}
-async function storeHandle(key, handle) {
-  try {
-    const db = await openHandleDB();
-    await new Promise(resolve => {
-      const tx = db.transaction('handles', 'readwrite');
-      tx.objectStore('handles').put(handle, key);
-      tx.oncomplete = resolve;
-    });
-  } catch { /* ignore */ }
-}
-
-// CSV ビルド
+// ── 取引CSV ビルド・パース ─────────────────────────
 function buildTransactionsCsv(txs) {
   const header = 'id,type,payer,amount,category,note,date,transferTo,beneficiary';
   const rows = txs
@@ -1116,194 +1083,6 @@ function parseTransactionsCsv(text) {
   return result;
 }
 
-// ファイルへ書き込み（非同期・fire-and-forget）
-async function writeTxToFile() {
-  if (!txFileHandle) return;
-  try {
-    const writable = await txFileHandle.createWritable();
-    await writable.write('\ufeff' + buildTransactionsCsv(transactions));
-    await writable.close();
-  } catch(e) {
-    console.warn('CSV書き込み失敗:', e);
-  }
-}
-
-// 接続ステータス表示更新
-function updateFileSyncStatus(state, name) {
-  const el  = document.getElementById('file-sync-status');
-  const btn = document.getElementById('file-sync-btn');
-  if (state === 'connected') {
-    el.textContent = '🔗 ' + name;
-    el.className   = 'file-sync-status connected';
-    btn.textContent = '変更';
-  } else if (state === 'reconnect') {
-    el.textContent = '⚠ ' + name + '（再接続が必要）';
-    el.className   = 'file-sync-status reconnect';
-    btn.textContent = '再接続';
-  } else {
-    el.textContent = '未接続';
-    el.className   = 'file-sync-status disconnected';
-    btn.textContent = 'ファイルを選択';
-  }
-}
-
-// ファイル選択 → 接続
-async function selectTxFile() {
-  if (!window.showOpenFilePicker) {
-    alert('このブラウザはFile System Access APIに対応していません。\nChrome/Edgeをお使いください。');
-    return;
-  }
-  try {
-    const [handle] = await window.showOpenFilePicker({
-      types: [{ description: 'CSV', accept: { 'text/csv': ['.csv'] } }],
-      multiple: false
-    });
-    txFileHandle = handle;
-    await storeHandle('transactions', handle);
-    const file = await handle.getFile();
-    const text = await file.text();
-    transactions = parseTransactionsCsv(text);
-    save(); // localStorageも更新
-    updateFileSyncStatus('connected', handle.name);
-    renderAll();
-  } catch { /* キャンセル時は何もしない */ }
-}
-
-// 起動時に保存済みハンドルを復元
-async function initFileSync() {
-  const btn = document.getElementById('file-sync-btn');
-
-  if (!window.showOpenFilePicker) {
-    updateFileSyncStatus('disconnected');
-    btn.addEventListener('click', selectTxFile);
-    return;
-  }
-
-  const handle = await getStoredHandle('transactions');
-  if (!handle) {
-    updateFileSyncStatus('disconnected');
-    btn.addEventListener('click', selectTxFile);
-    return;
-  }
-
-  try {
-    const perm = await handle.queryPermission({ mode: 'readwrite' });
-    if (perm === 'granted') {
-      txFileHandle = handle;
-      const file = await handle.getFile();
-      const text = await file.text();
-      transactions = parseTransactionsCsv(text);
-      localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
-      updateFileSyncStatus('connected', handle.name);
-      renderAll();
-      btn.addEventListener('click', selectTxFile);
-    } else {
-      // ページ読み込み直後は requestPermission にユーザー操作が必要
-      updateFileSyncStatus('reconnect', handle.name);
-      btn.addEventListener('click', async function reconnectHandler() {
-        try {
-          const p = await handle.requestPermission({ mode: 'readwrite' });
-          if (p === 'granted') {
-            txFileHandle = handle;
-            const file = await handle.getFile();
-            const text = await file.text();
-            transactions = parseTransactionsCsv(text);
-            localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
-            updateFileSyncStatus('connected', handle.name);
-            renderAll();
-            btn.removeEventListener('click', reconnectHandler);
-            btn.addEventListener('click', selectTxFile);
-          }
-        } catch { /* ignore */ }
-      });
-    }
-  } catch {
-    updateFileSyncStatus('disconnected');
-    btn.addEventListener('click', selectTxFile);
-  }
-}
-
-// バックアップ（手動エクスポート）
-document.getElementById('history-csv-export').addEventListener('click', () => {
-  const csv  = buildTransactionsCsv(transactions);
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = 'kakeibo-history.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-// ── 設定CSV エクスポート ──────────────────────────
-document.getElementById('settings-csv-export').addEventListener('click', () => {
-  const lines = [];
-  lines.push('gfName,' + settings.gfName);
-  lines.push('bfName,' + settings.bfName);
-  lines.push('ratioFrom,gfRatio,bfRatio');
-  [...settings.ratioHistory]
-    .sort((a,b) => a.from.localeCompare(b.from))
-    .forEach(r => lines.push(`${r.from},${r.gfRatio},${r.bfRatio}`));
-
-  const csv  = lines.join('\n');
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = 'kakeibo-settings.csv';
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-// ── 設定CSV インポート ──────────────────────────
-document.getElementById('settings-csv-import').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const text  = ev.target.result.replace(/^\ufeff/, ''); // BOM除去
-      const lines = text.trim().split(/\r?\n/);
-      let ratioHeader = false;
-      const newRatios = [];
-      let newGfName = settings.gfName;
-      let newBfName = settings.bfName;
-
-      for (const line of lines) {
-        const parts = line.split(',');
-        if (parts[0] === 'gfName') {
-          newGfName = parts[1] || settings.gfName;
-        } else if (parts[0] === 'bfName') {
-          newBfName = parts[1] || settings.bfName;
-        } else if (parts[0] === 'ratioFrom') {
-          ratioHeader = true;
-        } else if (ratioHeader && parts.length >= 3) {
-          const gfR = parseFloat(parts[1]);
-          const bfR = parseFloat(parts[2]);
-          if (parts[0] && !isNaN(gfR) && !isNaN(bfR)) {
-            newRatios.push({ from: parts[0], gfRatio: gfR, bfRatio: bfR });
-          }
-        }
-      }
-
-      settings.gfName = newGfName;
-      settings.bfName = newBfName;
-      if (newRatios.length > 0) settings.ratioHistory = newRatios;
-
-      save();
-      applyNames();
-      renderAll();
-      document.getElementById('setting-gf-name').value = settings.gfName;
-      document.getElementById('setting-bf-name').value = settings.bfName;
-      alert('設定をインポートしました');
-    } catch {
-      alert('CSVの読み込みに失敗しました');
-    }
-    e.target.value = ''; // 同じファイルを再選択できるようリセット
-  };
-  reader.readAsText(file, 'UTF-8');
-});
 
 // ── ログアウト ────────────────────────────────────
 document.getElementById('logout-btn').addEventListener('click', () => {
@@ -1316,5 +1095,4 @@ document.getElementById('logout-btn').addEventListener('click', () => {
 // ── 初期化 ────────────────────────────────────────
 applyNames();
 renderAll();
-initFileSync();      // File System Access API（Chrome/Edge）
-syncFromGitHub();    // GitHub API（全ブラウザ対応）
+syncFromGitHub(); // GitHub API で自動同期

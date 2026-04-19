@@ -110,16 +110,6 @@
         <option value="transfer">振替</option>
       </select>
     </div>
-    <div class="file-sync-bar">
-      <div class="file-sync-info">
-        <span class="file-sync-label">📄 データファイル</span>
-        <span id="file-sync-status" class="file-sync-status disconnected">未接続</span>
-      </div>
-      <div class="file-sync-actions">
-        <button id="file-sync-btn" class="btn-file-sync">ファイルを選択</button>
-        <button class="btn-csv-export" id="history-csv-export">↓ バックアップ</button>
-      </div>
-    </div>
     <div id="history-tx-list"></div>
   </div>
 
@@ -275,14 +265,6 @@
           </div>
         </div>
         <p class="ratio-hint">指定日以降の支出にこの割合を適用します</p>
-      </div>
-      <div class="form-group">
-        <label>📂 設定CSVバックアップ</label>
-        <div class="csv-btn-row">
-          <button class="btn-csv-export" id="settings-csv-export">↓ エクスポート</button>
-          <label class="btn-csv-import" for="settings-csv-import">↑ インポート</label>
-          <input type="file" id="settings-csv-import" accept=".csv" style="display:none">
-        </div>
       </div>
       <div class="form-group github-section">
         <label>🐙 GitHub 連動</label>
