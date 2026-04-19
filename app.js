@@ -170,13 +170,17 @@ function renderHome() {
     (t.payer === 'joint' && (t.type === 'expense' || t.type === 'advance') && !t.beneficiary) ||
     (t.payer === 'joint' && t.type === 'advance' && t.beneficiary)
   ).reduce((s,t)=>s+t.amount,0);
-  // その月の支出・入金（支出 + 振替出金 ※個人立て替えは除外）
+  // その月の支出・入金
+  // 共用財布直接支出 + 振替出金
   const monthJointExpOnly  = txs.filter(t => t.payer === 'joint' && (t.type === 'expense' || t.type === 'advance') && !t.beneficiary).reduce((s,t)=>s+t.amount,0);
   const monthJointTransOut = txs.filter(t => t.payer === 'joint' && t.type === 'transfer').reduce((s,t)=>s+t.amount,0);
-  const monthJointExp = monthJointExpOnly + monthJointTransOut;
+  // 彼女・彼氏の個人支出も家計全体の支出として加算
+  const monthPersonalExp = txs.filter(t => (t.payer === 'girlfriend' || t.payer === 'boyfriend') && t.type === 'expense').reduce((s,t)=>s+t.amount,0);
+  const monthJointExp = monthJointExpOnly + monthJointTransOut + monthPersonalExp;
+  // 入金：振替入金 + 個人支出分（個人が自ら立て替えた入金として扱う）
   const monthJointInRaw  = txs.filter(t => t.type === 'deposit' || (t.type === 'transfer' && t.transferTo === 'joint')).reduce((s,t)=>s+t.amount,0);
   const monthJointAdvance = txs.filter(t => t.type === 'advance' && t.payer === 'joint').reduce((s,t)=>s+t.amount,0);
-  const monthJointIn = monthJointInRaw - monthJointAdvance;
+  const monthJointIn = monthJointInRaw - monthJointAdvance + monthPersonalExp;
 
   document.getElementById('gf-amount').textContent      = fmt(gfTotal);
   document.getElementById('bf-amount').textContent      = fmt(bfTotal);
