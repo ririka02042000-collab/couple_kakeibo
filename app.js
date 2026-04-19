@@ -469,13 +469,13 @@ function renderSettle() {
       <div class="bd-info">
         <div class="bd-name">💳 入金額</div>
         <div class="bd-detail" style="margin-top:4px">
-          ${settings.gfName}：${fmt(gfToJoint)} ／ ${fmt(gfDepTarget)}
+          ${settings.gfName}：入金済 ${fmt(gfToJoint)} ／ ${fmt(gfDepTarget)}
           ${gfDepRemain > 0
             ? `→ <b>あと ${fmt(gfDepRemain)}</b>`
             : `→ <b class="deposit-done">達成 ✓</b>`}
         </div>
         <div class="bd-detail" style="margin-top:4px">
-          ${settings.bfName}：${fmt(bfToJoint)} ／ ${fmt(bfDepTarget)}
+          ${settings.bfName}：入金済 ${fmt(bfToJoint)} ／ ${fmt(bfDepTarget)}
           ${bfDepRemain > 0
             ? `→ <b>あと ${fmt(bfDepRemain)}</b>`
             : `→ <b class="deposit-done">達成 ✓</b>`}
