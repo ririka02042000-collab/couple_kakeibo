@@ -243,7 +243,16 @@ body {
 .tx-category { font-size: 0.88rem; font-weight: 600; }
 .tx-meta { font-size: 0.72rem; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.tx-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.tx-right { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+
+.tx-type-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 99px;
+}
+.tx-type-badge.expense  { background: #fee2e2; color: var(--expense); }
+.tx-type-badge.transfer { background: #fef3c7; color: #d97706; }
 
 .tx-amount { font-size: 0.95rem; font-weight: 700; }
 .tx-amount.expense  { color: var(--expense); }

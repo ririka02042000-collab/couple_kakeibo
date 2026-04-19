@@ -226,6 +226,7 @@ function renderTxList(containerId, list, showDelete) {
         <div class="tx-meta">${metaText}</div>
       </div>
       <div class="tx-right">
+        <div class="tx-type-badge ${t.type}">${t.type === 'transfer' ? '振替' : '支出'}</div>
         <div class="tx-amount ${t.type}">${sign(t.type, t.amount)}</div>
         ${showDelete ? `<button class="tx-delete" data-id="${t.id}">✕</button>` : ''}
       </div>
