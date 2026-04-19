@@ -45,7 +45,7 @@ let currentBeneficiary = 'none';
 let currentAdvanceTo   = 'girlfriend';
 let viewMonth        = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 let historyViewMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
-let historyShowAll   = true; // 全期間表示フラグ
+let historyShowAll   = false; // 全期間表示フラグ（起動時は当月）
 
 // ── ユーティリティ ─────────────────────────────────
 const fmt  = n  => '¥' + Math.abs(n).toLocaleString('ja-JP');
@@ -137,8 +137,7 @@ function monthTx() {
 
 // ── ホーム描画 ────────────────────────────────────
 function renderHome() {
-  document.getElementById('current-month-label').textContent =
-    viewMonth.replace('-', '年') + '月';
+  document.getElementById('current-month-input').value = viewMonth;
 
   const txs = monthTx();
 
@@ -209,15 +208,16 @@ function renderHistory() {
   const catF    = document.getElementById('filter-category').value;
   const typeF   = document.getElementById('filter-type').value;
 
-  // 月ラベル更新
-  const allBtn = document.getElementById('history-all-btn');
-  const monthLabel = document.getElementById('history-month-label');
+  // 月ナビ更新
+  const allBtn    = document.getElementById('history-all-btn');
+  const monthInput = document.getElementById('history-month-input');
   if (historyShowAll) {
     allBtn.classList.add('active');
-    monthLabel.textContent = '全期間';
+    monthInput.style.visibility = 'hidden';
   } else {
     allBtn.classList.remove('active');
-    monthLabel.textContent = historyViewMonth.replace('-', '年') + '月';
+    monthInput.style.visibility = 'visible';
+    monthInput.value = historyViewMonth;
   }
 
   let list = transactions.slice();
@@ -537,6 +537,11 @@ document.getElementById('next-month').addEventListener('click', () => {
   viewMonth = d.toISOString().slice(0,7);
   renderAll();
 });
+document.getElementById('current-month-input').addEventListener('change', e => {
+  if (!e.target.value) return;
+  viewMonth = e.target.value;
+  renderAll();
+});
 
 // ── 月ナビ（履歴） ────────────────────────────────
 document.getElementById('history-all-btn').addEventListener('click', async () => {
@@ -557,6 +562,13 @@ document.getElementById('history-next-month').addEventListener('click', async ()
   const d = new Date(historyViewMonth + '-01');
   d.setMonth(d.getMonth() + 1);
   historyViewMonth = d.toISOString().slice(0,7);
+  await ensureYearLoaded(historyViewMonth.slice(0,4));
+  renderHistory();
+});
+document.getElementById('history-month-input').addEventListener('change', async e => {
+  if (!e.target.value) return;
+  historyShowAll   = false;
+  historyViewMonth = e.target.value;
   await ensureYearLoaded(historyViewMonth.slice(0,4));
   renderHistory();
 });

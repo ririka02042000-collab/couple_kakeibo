@@ -36,7 +36,7 @@
     <!-- 月選択 -->
     <div class="month-nav">
       <button id="prev-month">‹</button>
-      <span id="current-month-label"></span>
+      <input type="month" id="current-month-input" class="month-input">
       <button id="next-month">›</button>
     </div>
 
@@ -77,9 +77,9 @@
   <div class="tab-content" id="tab-history">
     <!-- 月選択 -->
     <div class="month-nav history-month-nav">
-      <button class="history-month-all-btn active" id="history-all-btn">全期間</button>
+      <button class="history-month-all-btn" id="history-all-btn">全期間</button>
       <button id="history-prev-month">‹</button>
-      <span id="history-month-label">全期間</span>
+      <input type="month" id="history-month-input" class="month-input">
       <button id="history-next-month">›</button>
     </div>
     <div class="filter-bar">
