@@ -1067,8 +1067,25 @@ async function listGhYearFiles() {
 async function loadYearFromGitHub(year, force = false) {
   if (!force && loadedYears.has(year)) return;
   const { content, sha } = await ghRead(ghYearPath(year));
-  ghYearShas[year]        = sha || ghYearShas[year];
-  transactionsByYear[year] = content ? parseTransactionsCsv(content) : [];
+  ghYearShas[year] = sha || ghYearShas[year];
+
+  const remoteTxs = content ? parseTransactionsCsv(content) : [];
+  const localTxs  = transactionsByYear[year] || [];
+
+  if (localTxs.length > 0 && remoteTxs.length > 0) {
+    // ローカルとリモートをマージ（IDが同じ場合はリモート優先）
+    const merged = {};
+    localTxs.forEach(t  => { merged[t.id] = t; });
+    remoteTxs.forEach(t => { merged[t.id] = t; });
+    transactionsByYear[year] = Object.values(merged);
+    // ローカルにしかない取引があれば GitHubへ書き戻す
+    const remoteIds = new Set(remoteTxs.map(t => String(t.id)));
+    const hasLocalOnly = localTxs.some(t => !remoteIds.has(String(t.id)));
+    if (hasLocalOnly) scheduleSyncYearToGitHub(year);
+  } else {
+    transactionsByYear[year] = remoteTxs.length > 0 ? remoteTxs : localTxs;
+  }
+
   loadedYears.add(year);
   rebuildTransactions();
 }
