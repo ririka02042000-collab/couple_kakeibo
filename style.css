@@ -208,6 +208,55 @@ body {
 .transaction-list { display: flex; flex-direction: column; gap: 8px; }
 .empty-msg { text-align: center; color: var(--muted); padding: 32px 0; font-size: 0.85rem; }
 
+/* 日付グループ */
+.tx-date-header {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 8px 4px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-top: 8px;
+}
+.tx-date-header:first-child { margin-top: 0; }
+.tx-group { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+
+/* 履歴月ナビ */
+.history-month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.history-month-nav button {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: var(--text);
+}
+.history-month-all-btn {
+  font-size: 0.78rem !important;
+  font-weight: 700;
+  color: var(--muted) !important;
+  padding: 4px 10px !important;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.history-month-all-btn.active {
+  background: var(--joint) !important;
+  color: white !important;
+  border-color: var(--joint) !important;
+}
+#history-month-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  min-width: 80px;
+  text-align: center;
+}
+
 .tx-item {
   background: white;
   border-radius: var(--radius);

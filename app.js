@@ -29,7 +29,9 @@ let currentPayer       = 'girlfriend';
 let currentTransferTo  = 'boyfriend';
 let currentBeneficiary = 'none';
 let currentAdvanceTo   = 'girlfriend';
-let viewMonth    = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+let viewMonth        = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+let historyViewMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+let historyShowAll   = true; // 全期間表示フラグ
 
 // ── ユーティリティ ─────────────────────────────────
 const fmt  = n  => '¥' + Math.abs(n).toLocaleString('ja-JP');
@@ -190,15 +192,66 @@ function renderHistory() {
   const catF    = document.getElementById('filter-category').value;
   const typeF   = document.getElementById('filter-type').value;
 
-  let list = transactions.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
+  // 月ラベル更新
+  const allBtn = document.getElementById('history-all-btn');
+  const monthLabel = document.getElementById('history-month-label');
+  if (historyShowAll) {
+    allBtn.classList.add('active');
+    monthLabel.textContent = '';
+  } else {
+    allBtn.classList.remove('active');
+    monthLabel.textContent = historyViewMonth.replace('-', '年') + '月';
+  }
+
+  let list = transactions.slice();
+  if (!historyShowAll) list = list.filter(t => t.date.startsWith(historyViewMonth));
   if (payerF) list = list.filter(t => t.payer === payerF);
   if (catF)   list = list.filter(t => t.category === catF);
   if (typeF)  list = list.filter(t => t.type === typeF);
+  list.sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
 
   renderTxList('history-tx-list', list, true);
 }
 
-// ── 取引リスト共通描画 ────────────────────────────
+// ── 取引1件のHTML生成 ──────────────────────────────
+function buildTxItem(t, showDelete) {
+  const pi = PAYER_INFO[t.payer] || PAYER_INFO.joint;
+  const payerName = t.payer === 'girlfriend' ? settings.gfName
+                  : t.payer === 'boyfriend'  ? settings.bfName : '共用財布';
+
+  let categoryText, metaText;
+  if (t.type === 'transfer') {
+    const toName = t.transferTo === 'girlfriend' ? settings.gfName
+                 : t.transferTo === 'boyfriend'  ? settings.bfName : '共用財布';
+    categoryText = `${payerName} → ${toName}`;
+    metaText = t.note ? escHtml(t.note) : '';
+  } else if (t.type === 'advance') {
+    const toName = t.beneficiary === 'girlfriend' ? settings.gfName : settings.bfName;
+    categoryText = `${t.category || 'その他'} (${toName}個人)`;
+    metaText = [payerName, t.note ? escHtml(t.note) : ''].filter(Boolean).join(' · ');
+  } else {
+    categoryText = t.category || TYPE_LABELS[t.type];
+    metaText = [payerName, t.note ? escHtml(t.note) : ''].filter(Boolean).join(' · ');
+  }
+
+  const item = document.createElement('div');
+  item.className = 'tx-item';
+  item.innerHTML = `
+    <div class="tx-payer-badge ${pi.class}">${pi.emoji}</div>
+    <div class="tx-info">
+      <div class="tx-category">${categoryText}</div>
+      ${metaText ? `<div class="tx-meta">${metaText}</div>` : ''}
+    </div>
+    <div class="tx-right">
+      <div class="tx-type-badge ${t.type}">${t.type === 'transfer' ? '振替' : t.type === 'advance' ? '立替' : '支出'}</div>
+      <div class="tx-amount ${t.type}">${sign(t.type, t.amount)}</div>
+      ${showDelete ? `<button class="tx-delete" data-id="${t.id}">✕</button>` : ''}
+    </div>
+  `;
+  return item;
+}
+
+// ── 取引リスト共通描画（日付グループ化） ───────────
 function renderTxList(containerId, list, showDelete) {
   const el = document.getElementById(containerId);
   el.innerHTML = '';
@@ -208,43 +261,29 @@ function renderTxList(containerId, list, showDelete) {
     return;
   }
 
+  // 日付でグループ化
+  const groups = {};
   list.forEach(t => {
-    const pi = PAYER_INFO[t.payer] || PAYER_INFO.joint;
-    const payerName = t.payer === 'girlfriend' ? settings.gfName
-                    : t.payer === 'boyfriend'  ? settings.bfName : '共用財布';
+    if (!groups[t.date]) groups[t.date] = [];
+    groups[t.date].push(t);
+  });
 
-    let categoryText, metaText;
-    if (t.type === 'transfer') {
-      const toName = t.transferTo === 'girlfriend' ? settings.gfName
-                   : t.transferTo === 'boyfriend'  ? settings.bfName : '共用財布';
-      categoryText = `${payerName} → ${toName}`;
-      metaText = fmtDate(t.date) + (t.note ? ' · ' + escHtml(t.note) : '');
-    } else if (t.type === 'advance') {
-      const toName = t.beneficiary === 'girlfriend' ? settings.gfName : settings.bfName;
-      categoryText = `${t.category || 'その他'} (${toName}個人)`;
-      metaText = [payerName, fmtDate(t.date), t.note ? escHtml(t.note) : ''].filter(Boolean).join(' · ');
-    } else {
-      const benName = t.beneficiary === 'girlfriend' ? settings.gfName
-                    : t.beneficiary === 'boyfriend'  ? settings.bfName : null;
-      categoryText = (t.category || TYPE_LABELS[t.type]) + (benName ? ` (${benName}個人)` : '');
-      metaText = [payerName, fmtDate(t.date), t.note ? escHtml(t.note) : ''].filter(Boolean).join(' · ');
-    }
+  // 日付降順で表示
+  Object.keys(groups).sort((a,b) => b.localeCompare(a)).forEach(date => {
+    const dt = new Date(date + 'T00:00:00');
+    const dateLabel = `${dt.getMonth()+1}月${dt.getDate()}日`;
 
-    const item = document.createElement('div');
-    item.className = 'tx-item';
-    item.innerHTML = `
-      <div class="tx-payer-badge ${pi.class}">${pi.emoji}</div>
-      <div class="tx-info">
-        <div class="tx-category">${categoryText}</div>
-        <div class="tx-meta">${metaText}</div>
-      </div>
-      <div class="tx-right">
-        <div class="tx-type-badge ${t.type}">${t.type === 'transfer' ? '振替' : t.type === 'advance' ? '立替' : '支出'}</div>
-        <div class="tx-amount ${t.type}">${sign(t.type, t.amount)}</div>
-        ${showDelete ? `<button class="tx-delete" data-id="${t.id}">✕</button>` : ''}
-      </div>
-    `;
-    el.appendChild(item);
+    const header = document.createElement('div');
+    header.className = 'tx-date-header';
+    header.textContent = dateLabel;
+    el.appendChild(header);
+
+    const group = document.createElement('div');
+    group.className = 'tx-group';
+    groups[date].sort((a,b) => b.id - a.id).forEach(t => {
+      group.appendChild(buildTxItem(t, showDelete));
+    });
+    el.appendChild(group);
   });
 }
 
@@ -456,10 +495,11 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'history') renderHistory();
   });
 });
 
-// ── 月ナビ ────────────────────────────────────────
+// ── 月ナビ（ホーム） ──────────────────────────────
 document.getElementById('prev-month').addEventListener('click', () => {
   const d = new Date(viewMonth + '-01');
   d.setMonth(d.getMonth() - 1);
@@ -471,6 +511,26 @@ document.getElementById('next-month').addEventListener('click', () => {
   d.setMonth(d.getMonth() + 1);
   viewMonth = d.toISOString().slice(0,7);
   renderAll();
+});
+
+// ── 月ナビ（履歴） ────────────────────────────────
+document.getElementById('history-all-btn').addEventListener('click', () => {
+  historyShowAll = true;
+  renderHistory();
+});
+document.getElementById('history-prev-month').addEventListener('click', () => {
+  historyShowAll = false;
+  const d = new Date(historyViewMonth + '-01');
+  d.setMonth(d.getMonth() - 1);
+  historyViewMonth = d.toISOString().slice(0,7);
+  renderHistory();
+});
+document.getElementById('history-next-month').addEventListener('click', () => {
+  historyShowAll = false;
+  const d = new Date(historyViewMonth + '-01');
+  d.setMonth(d.getMonth() + 1);
+  historyViewMonth = d.toISOString().slice(0,7);
+  renderHistory();
 });
 
 // ── モーダル ──────────────────────────────────────

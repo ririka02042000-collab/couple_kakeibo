@@ -75,6 +75,13 @@
 
   <!-- 履歴タブ -->
   <div class="tab-content" id="tab-history">
+    <!-- 月選択 -->
+    <div class="month-nav history-month-nav">
+      <button id="history-prev-month">‹</button>
+      <button class="history-month-all-btn active" id="history-all-btn">全期間</button>
+      <span id="history-month-label"></span>
+      <button id="history-next-month">›</button>
+    </div>
     <div class="filter-bar">
       <select id="filter-payer">
         <option value="">全員</option>
@@ -99,12 +106,11 @@
       <select id="filter-type">
         <option value="">すべて</option>
         <option value="expense">支出</option>
+        <option value="advance">立替</option>
         <option value="transfer">振替</option>
       </select>
     </div>
-    <div class="transaction-list" id="history-tx-list">
-      <p class="empty-msg">取引がありません</p>
-    </div>
+    <div id="history-tx-list"></div>
   </div>
 
   <!-- 精算タブ -->
