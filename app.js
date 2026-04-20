@@ -1190,12 +1190,7 @@ async function syncFromGitHub() {
     const currentYear = new Date().getFullYear().toString();
     const needsWriteBack = await loadYearFromGitHub(currentYear, true);
     if (needsWriteBack) {
-      const yearTxs = transactionsByYear[currentYear] || [];
-      ghYearShas[currentYear] = await ghWrite(
-        ghYearPath(currentYear),
-        buildTransactionsCsv(yearTxs),
-        ghYearShas[currentYear]
-      );
+      await writeYearToGitHub(currentYear);
     }
 
     // 設定データを読み込み
@@ -1220,6 +1215,7 @@ async function syncFromGitHub() {
 }
 
 // 指定年のファイルを GitHub へ書き込む（デバウンス付き・2秒後）
+// 409/422（SHA競合）の場合は最新データをマージしてリトライする
 function scheduleSyncYearToGitHub(year) {
   if (!ghConfig.token || !ghConfig.repo || !year) return;
   clearTimeout(ghSyncTimers[year]);
@@ -1228,11 +1224,7 @@ function scheduleSyncYearToGitHub(year) {
     if (ghSyncing) { scheduleSyncYearToGitHub(year); return; }
     updateGhStatus('syncing');
     try {
-      // 書き込み前に必ず最新 SHA を取得（キャッシュが古いと 422 になるため）
-      const { sha } = await ghRead(ghYearPath(year));
-      if (sha) ghYearShas[year] = sha;
-      const yearTxs = transactionsByYear[year] || [];
-      ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
+      await writeYearToGitHub(year);
       updateGhStatus('ok');
     } catch(e) {
       const status = e.message?.match(/GitHub API (\d+)/)?.[1];
@@ -1240,6 +1232,39 @@ function scheduleSyncYearToGitHub(year) {
       updateGhStatus('error', status);
     }
   }, 2000);
+}
+
+// 年データを GitHub へ書き込む（409/422 時はリモートとマージして1回リトライ）
+async function writeYearToGitHub(year) {
+  // 書き込み前に最新 SHA とリモート内容を取得
+  const { content: remoteContent, sha } = await ghRead(ghYearPath(year));
+  if (sha) ghYearShas[year] = sha;
+
+  // ローカルとリモートをマージ（ローカル優先：直前の入力を保持）
+  const localTxs  = transactionsByYear[year] || [];
+  const remoteTxs = remoteContent ? parseTransactionsCsv(remoteContent) : [];
+  if (remoteTxs.length > 0) {
+    const merged = {};
+    remoteTxs.forEach(t => { merged[t.id] = t; });
+    localTxs.forEach(t  => { merged[t.id] = t; }); // ローカル優先
+    transactionsByYear[year] = Object.values(merged);
+    rebuildTransactions();
+  }
+
+  try {
+    const yearTxs = transactionsByYear[year] || [];
+    ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
+  } catch(e) {
+    // 409/422（SHA競合）なら SHA を再取得してもう1回だけリトライ
+    if (/GitHub API (409|422)/.test(e.message)) {
+      const { sha: newSha } = await ghRead(ghYearPath(year));
+      if (newSha) ghYearShas[year] = newSha;
+      const yearTxs = transactionsByYear[year] || [];
+      ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
+    } else {
+      throw e;
+    }
+  }
 }
 
 // 設定のみ GitHub へ書き込む（デバウンス付き）
