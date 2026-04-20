@@ -1064,30 +1064,32 @@ async function listGhYearFiles() {
 }
 
 // 1年分のデータを GitHub から読み込む（force=true で強制再読み込み）
+// 戻り値: ローカルにしかない取引があった場合は true（呼び出し元で書き戻しを行う）
 async function loadYearFromGitHub(year, force = false) {
-  if (!force && loadedYears.has(year)) return;
+  if (!force && loadedYears.has(year)) return false;
   const { content, sha } = await ghRead(ghYearPath(year));
   ghYearShas[year] = sha || ghYearShas[year];
 
   const remoteTxs = content ? parseTransactionsCsv(content) : [];
   const localTxs  = transactionsByYear[year] || [];
 
+  let hasLocalOnly = false;
   if (localTxs.length > 0 && remoteTxs.length > 0) {
     // ローカルとリモートをマージ（IDが同じ場合はリモート優先）
     const merged = {};
     localTxs.forEach(t  => { merged[t.id] = t; });
     remoteTxs.forEach(t => { merged[t.id] = t; });
     transactionsByYear[year] = Object.values(merged);
-    // ローカルにしかない取引があれば GitHubへ書き戻す
+    // ローカルにしかない取引があるか確認
     const remoteIds = new Set(remoteTxs.map(t => String(t.id)));
-    const hasLocalOnly = localTxs.some(t => !remoteIds.has(String(t.id)));
-    if (hasLocalOnly) scheduleSyncYearToGitHub(year);
+    hasLocalOnly = localTxs.some(t => !remoteIds.has(String(t.id)));
   } else {
     transactionsByYear[year] = remoteTxs.length > 0 ? remoteTxs : localTxs;
   }
 
   loadedYears.add(year);
   rebuildTransactions();
+  return hasLocalOnly;
 }
 
 // 指定年が未ロードなら読み込む
@@ -1180,8 +1182,17 @@ async function syncFromGitHub() {
     await listGhYearFiles();
 
     // 当年データを強制再読み込み（キャッシュ無効）
+    // ローカルにしかない取引があれば、ここで書き戻す（同期完了前に直列処理）
     const currentYear = new Date().getFullYear().toString();
-    await loadYearFromGitHub(currentYear, true);
+    const needsWriteBack = await loadYearFromGitHub(currentYear, true);
+    if (needsWriteBack) {
+      const yearTxs = transactionsByYear[currentYear] || [];
+      ghYearShas[currentYear] = await ghWrite(
+        ghYearPath(currentYear),
+        buildTransactionsCsv(yearTxs),
+        ghYearShas[currentYear]
+      );
+    }
 
     // 設定データを読み込み
     const { content: setContent, sha: setSha } = await ghRead(GH_SET_PATH);
@@ -1218,8 +1229,9 @@ function scheduleSyncYearToGitHub(year) {
       ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
       updateGhStatus('ok');
     } catch(e) {
+      const status = e.message?.match(/GitHub API (\d+)/)?.[1];
       console.error('GitHub write error:', e);
-      updateGhStatus('error');
+      updateGhStatus('error', status);
     }
   }, 2000);
 }
