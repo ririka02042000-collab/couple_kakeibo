@@ -781,6 +781,19 @@ body {
   margin-bottom: 4px;
 }
 
+/* ヘッダー常時表示 */
+.gh-sync-status-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 99px;
+  white-space: nowrap;
+  transition: opacity 0.3s;
+}
+.gh-sync-status-header.gh-ok      { background: #d1fae5; color: #059669; }
+.gh-sync-status-header.gh-syncing { background: #dbeafe; color: #2563eb; }
+.gh-sync-status-header.gh-error   { background: #fee2e2; color: var(--expense); }
+
 .gh-sync-status {
   font-size: 0.8rem;
   font-weight: 700;

@@ -1159,17 +1159,30 @@ function applySettingsFromCsv(text) {
 
 // 同期ステータス表示（detail: HTTPステータスコードなど任意の補足）
 function updateGhStatus(state, detail) {
-  const el = document.getElementById('gh-sync-status');
-  if (!el) return;
   const map = {
     none:    { text: '未設定',      cls: 'gh-none'    },
     syncing: { text: '⟳ 同期中…',  cls: 'gh-syncing' },
     ok:      { text: '✓ 同期済み', cls: 'gh-ok'      },
     error:   { text: '✕ エラー',   cls: 'gh-error'   },
   };
-  const s = map[state] || map.none;
-  el.textContent = detail ? `${s.text} ${detail}` : s.text;
-  el.className   = `gh-sync-status ${s.cls}`;
+  const s    = map[state] || map.none;
+  const text = detail ? `${s.text} ${detail}` : s.text;
+
+  // 設定モーダル内のステータス
+  const el = document.getElementById('gh-sync-status');
+  if (el) { el.textContent = text; el.className = `gh-sync-status ${s.cls}`; }
+
+  // ヘッダー常時表示ステータス（未設定時は非表示）
+  const hdr = document.getElementById('gh-sync-status-header');
+  if (hdr) {
+    if (state === 'none') {
+      hdr.textContent = '';
+      hdr.className   = 'gh-sync-status-header';
+    } else {
+      hdr.textContent = text;
+      hdr.className   = `gh-sync-status-header ${s.cls}`;
+    }
+  }
 }
 
 // GitHub から読み込み（起動時：当年のみ、他は遅延）
