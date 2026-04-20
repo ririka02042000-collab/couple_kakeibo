@@ -1247,32 +1247,24 @@ function scheduleSyncYearToGitHub(year) {
   }, 2000);
 }
 
-// 年データを GitHub へ書き込む（409/422 時はリモートとマージして1回リトライ）
+// 年データを GitHub へ書き込む
+// ・書き込み前に最新 SHA を取得（422回避）
+// ・マージはしない（削除・編集がリモートデータで上書きされるのを防ぐ）
+// ・409/422（SHA競合）時は SHA 再取得して1回リトライ
 async function writeYearToGitHub(year) {
-  // 書き込み前に最新 SHA とリモート内容を取得
-  const { content: remoteContent, sha } = await ghRead(ghYearPath(year));
+  const yearTxs = transactionsByYear[year] || [];
+
+  // 最新 SHA を取得
+  const { sha } = await ghRead(ghYearPath(year));
   if (sha) ghYearShas[year] = sha;
 
-  // ローカルとリモートをマージ（ローカル優先：直前の入力を保持）
-  const localTxs  = transactionsByYear[year] || [];
-  const remoteTxs = remoteContent ? parseTransactionsCsv(remoteContent) : [];
-  if (remoteTxs.length > 0) {
-    const merged = {};
-    remoteTxs.forEach(t => { merged[t.id] = t; });
-    localTxs.forEach(t  => { merged[t.id] = t; }); // ローカル優先
-    transactionsByYear[year] = Object.values(merged);
-    rebuildTransactions();
-  }
-
   try {
-    const yearTxs = transactionsByYear[year] || [];
     ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
   } catch(e) {
     // 409/422（SHA競合）なら SHA を再取得してもう1回だけリトライ
     if (/GitHub API (409|422)/.test(e.message)) {
-      const { sha: newSha } = await ghRead(ghYearPath(year));
-      if (newSha) ghYearShas[year] = newSha;
-      const yearTxs = transactionsByYear[year] || [];
+      const { sha: retrySha } = await ghRead(ghYearPath(year));
+      if (retrySha) ghYearShas[year] = retrySha;
       ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
     } else {
       throw e;
