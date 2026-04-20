@@ -66,3 +66,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1776687772688,expense,joint,100,食費,"",2026-04-20,,
 1776689032415,expense,joint,100,食費,"",2026-04-20,,
 1776690081592,expense,joint,200,食費,"",2026-04-20,,
+1776690258575,expense,girlfriend,300,食費,"",2026-04-20,,
