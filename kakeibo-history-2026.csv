@@ -63,6 +63,3 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1745054260000,expense,joint,3100,食費,"サイゼリヤ",2026-04-18,,
 1745054261000,expense,joint,3465,娯楽費,"ジグソーパズル",2026-04-18,,
 1745054262000,expense,boyfriend,2111,食費,"パン",2026-04-19,,
-1776689032415,expense,joint,400,食費,"",2026-04-20,,
-1776690081592,expense,joint,500,食費,"",2026-04-20,,
-1776690258575,expense,girlfriend,300,食費,"",2026-04-20,,
