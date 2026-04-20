@@ -37,6 +37,7 @@ let ghYearShas     = {};              // { '2026': 'sha...', ... }
 let availableYears = [];              // GitHub に存在する年一覧
 let ghSetSha       = null;
 let ghSyncTimers   = {};              // { year: timerID }
+let ghSyncing      = false;           // syncFromGitHub 実行中フラグ（多重起動防止）
 
 let currentType        = 'expense';
 let currentPayer       = 'joint';
@@ -1176,6 +1177,9 @@ async function syncFromGitHub() {
   // トークン・リポジトリが未設定または不正な場合はスキップ
   const hasValidToken = ghConfig.token && ghConfig.token !== '（設定済み）';
   if (!hasValidToken || !ghConfig.repo) { updateGhStatus('none'); return; }
+  // 多重実行防止
+  if (ghSyncing) return;
+  ghSyncing = true;
   updateGhStatus('syncing');
   try {
     // 年別ファイル一覧を取得
@@ -1208,6 +1212,8 @@ async function syncFromGitHub() {
     const status = e.message?.match(/GitHub API (\d+)/)?.[1];
     console.error('GitHub sync error:', e.message || e);
     updateGhStatus('error', status);
+  } finally {
+    ghSyncing = false;
   }
   // 描画は同期の成否に関わらず実行（描画エラーを同期エラーと混同しない）
   renderAll();
@@ -1218,13 +1224,13 @@ function scheduleSyncYearToGitHub(year) {
   if (!ghConfig.token || !ghConfig.repo || !year) return;
   clearTimeout(ghSyncTimers[year]);
   ghSyncTimers[year] = setTimeout(async () => {
+    // メインの同期中は少し待ってリトライ
+    if (ghSyncing) { scheduleSyncYearToGitHub(year); return; }
     updateGhStatus('syncing');
     try {
-      // sha が未取得の場合は先に読んで取得（既存ファイルへの上書きに必要）
-      if (!ghYearShas[year]) {
-        const { sha } = await ghRead(ghYearPath(year));
-        if (sha) ghYearShas[year] = sha;
-      }
+      // 書き込み前に必ず最新 SHA を取得（キャッシュが古いと 422 になるため）
+      const { sha } = await ghRead(ghYearPath(year));
+      if (sha) ghYearShas[year] = sha;
       const yearTxs = transactionsByYear[year] || [];
       ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
       updateGhStatus('ok');
