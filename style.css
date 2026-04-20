@@ -62,8 +62,8 @@ body {
 }
 .logout-btn {
   background: none;
-  border: 1px solid rgba(255,255,255,0.5);
-  color: #fff;
+  border: 1px solid var(--primary);
+  color: var(--primary);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
