@@ -1268,20 +1268,24 @@ function scheduleSyncYearToGitHub(year) {
 async function writeYearToGitHub(year) {
   const yearTxs = transactionsByYear[year] || [];
 
-  // 最新 SHA を取得
-  const { sha } = await ghRead(ghYearPath(year));
-  if (sha) ghYearShas[year] = sha;
+  // 409/422（SHA競合）が出ても最大3回リトライ（待ち時間を増やしながら）
+  const MAX_RETRY = 3;
+  for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+    // 毎回最新 SHA を取得
+    const { sha } = await ghRead(ghYearPath(year));
+    if (sha) ghYearShas[year] = sha;
 
-  try {
-    ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
-  } catch(e) {
-    // 409/422（SHA競合）なら SHA を再取得してもう1回だけリトライ
-    if (/GitHub API (409|422)/.test(e.message)) {
-      const { sha: retrySha } = await ghRead(ghYearPath(year));
-      if (retrySha) ghYearShas[year] = retrySha;
+    try {
       ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
-    } else {
-      throw e;
+      return; // 成功
+    } catch(e) {
+      const is409 = /GitHub API (409|422)/.test(e.message);
+      if (is409 && attempt < MAX_RETRY - 1) {
+        // 少し待ってリトライ（500ms → 1000ms → 1500ms）
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      throw e; // 最終リトライも失敗、または別エラー
     }
   }
 }
@@ -1399,23 +1403,41 @@ document.getElementById('logout-btn').addEventListener('click', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'hidden') return;
   if (!ghConfig.token || !ghConfig.repo) return;
+  // メイン同期中は競合するので何もしない（syncFromGitHub 内で書き戻し済み）
+  if (ghSyncing) return;
 
-  // pending な年ファイル書き込みを即時実行
-  Object.keys(ghSyncTimers).forEach(year => {
-    if (ghSyncTimers[year] == null) return;
+  // pending な年ファイル書き込みを即時実行（タイマーをキャンセルして即時起動）
+  const pendingYears = Object.keys(ghSyncTimers).filter(y => ghSyncTimers[y] != null);
+  pendingYears.forEach(year => {
     clearTimeout(ghSyncTimers[year]);
     ghSyncTimers[year] = null;
-    writeYearToGitHub(year).catch(e => console.error('visibility write error:', e));
   });
+  if (pendingYears.length > 0) {
+    // 直列に実行して競合を防ぐ
+    pendingYears.reduce((p, year) =>
+      p.then(() => writeYearToGitHub(year)).catch(e => console.error('visibility write error:', e)),
+      Promise.resolve()
+    );
+  }
 
   // pending な設定ファイル書き込みを即時実行
   if (ghSetSyncTimer != null) {
     clearTimeout(ghSetSyncTimer);
     ghSetSyncTimer = null;
-    const body = { message: `update ${GH_SET_PATH}`, content: toB64(buildSettingsCsv()), branch: ghConfig.branch || 'main' };
-    if (ghSetSha) body.sha = ghSetSha;
-    ghAPI(GH_SET_PATH, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      .then(r => { if (r?.content?.sha) ghSetSha = r.content.sha; })
+    scheduleSyncSettingsToGitHub._flush?.();
+    ghRead(GH_SET_PATH).then(({ sha }) => {
+      if (sha) ghSetSha = sha;
+      return ghAPI(GH_SET_PATH, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `update ${GH_SET_PATH}`,
+          content: toB64(buildSettingsCsv()),
+          branch:  ghConfig.branch || 'main',
+          ...(ghSetSha ? { sha: ghSetSha } : {})
+        })
+      });
+    }).then(r => { if (r?.content?.sha) ghSetSha = r.content.sha; })
       .catch(e => console.error('visibility settings write error:', e));
   }
 });
