@@ -1087,10 +1087,11 @@ async function loadYearFromGitHub(year, force = false) {
 
   let hasLocalOnly = false;
   if (localTxs.length > 0 && filteredRemoteTxs.length > 0) {
-    // ローカルとリモートをマージ（IDが同じ場合はリモート優先）
+    // マージ：リモートを下敷きにしてローカルで上書き（ローカル優先）
+    // → 編集がリモートの旧データで失われないようにするため
     const merged = {};
-    localTxs.forEach(t => { merged[t.id] = t; });
-    filteredRemoteTxs.forEach(t => { merged[t.id] = t; });
+    filteredRemoteTxs.forEach(t => { merged[t.id] = t; }); // リモートを先に
+    localTxs.forEach(t => { merged[t.id] = t; });           // ローカルで上書き
     transactionsByYear[year] = Object.values(merged);
     // ローカルにしかない取引があるか確認（書き戻しトリガー）
     const remoteIds = new Set(filteredRemoteTxs.map(t => String(t.id)));
@@ -1390,6 +1391,32 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   if (confirm('ログアウトしますか？')) {
     sessionStorage.removeItem('kakeibo_auth');
     location.replace('login.html');
+  }
+});
+
+// ── バックグラウンド移行時に pending な書き込みを即時実行 ──────────
+// タブ消去・スリープ・ログアウト前に2秒タイマーを待たず即座に同期する
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'hidden') return;
+  if (!ghConfig.token || !ghConfig.repo) return;
+
+  // pending な年ファイル書き込みを即時実行
+  Object.keys(ghSyncTimers).forEach(year => {
+    if (ghSyncTimers[year] == null) return;
+    clearTimeout(ghSyncTimers[year]);
+    ghSyncTimers[year] = null;
+    writeYearToGitHub(year).catch(e => console.error('visibility write error:', e));
+  });
+
+  // pending な設定ファイル書き込みを即時実行
+  if (ghSetSyncTimer != null) {
+    clearTimeout(ghSetSyncTimer);
+    ghSetSyncTimer = null;
+    const body = { message: `update ${GH_SET_PATH}`, content: toB64(buildSettingsCsv()), branch: ghConfig.branch || 'main' };
+    if (ghSetSha) body.sha = ghSetSha;
+    ghAPI(GH_SET_PATH, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(r => { if (r?.content?.sha) ghSetSha = r.content.sha; })
+      .catch(e => console.error('visibility settings write error:', e));
   }
 });
 
