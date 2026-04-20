@@ -38,6 +38,11 @@ let availableYears = [];              // GitHub に存在する年一覧
 let ghSetSha       = null;
 let ghSyncTimers   = {};              // { year: timerID }
 let ghSyncing      = false;           // syncFromGitHub 実行中フラグ（多重起動防止）
+// 削除済みID集合：同期時にリモートから復活させないために記録
+let deletedIds = new Set(JSON.parse(localStorage.getItem('kakeibo_deleted') || '[]'));
+function saveDeletedIds() {
+  localStorage.setItem('kakeibo_deleted', JSON.stringify([...deletedIds]));
+}
 
 let currentType        = 'expense';
 let currentPayer       = 'joint';
@@ -900,6 +905,9 @@ document.getElementById('history-tx-list').addEventListener('click', e => {
       transactionsByYear[delYear] = transactionsByYear[delYear].filter(t => t.id !== delId);
     }
     transactions = transactions.filter(t => t.id !== delId);
+    // 削除IDを記録（同期時にリモートから復活しないようにする）
+    deletedIds.add(String(delId));
+    saveDeletedIds();
     save(delYear);
     renderAll();
   }
@@ -1074,18 +1082,23 @@ async function loadYearFromGitHub(year, force = false) {
   const remoteTxs = content ? parseTransactionsCsv(content) : [];
   const localTxs  = transactionsByYear[year] || [];
 
+  // 削除済みIDをリモートデータから除外（ローカルで削除したものを復活させない）
+  const filteredRemoteTxs = remoteTxs.filter(t => !deletedIds.has(String(t.id)));
+
   let hasLocalOnly = false;
-  if (localTxs.length > 0 && remoteTxs.length > 0) {
+  if (localTxs.length > 0 && filteredRemoteTxs.length > 0) {
     // ローカルとリモートをマージ（IDが同じ場合はリモート優先）
     const merged = {};
-    localTxs.forEach(t  => { merged[t.id] = t; });
-    remoteTxs.forEach(t => { merged[t.id] = t; });
+    localTxs.forEach(t => { merged[t.id] = t; });
+    filteredRemoteTxs.forEach(t => { merged[t.id] = t; });
     transactionsByYear[year] = Object.values(merged);
-    // ローカルにしかない取引があるか確認
-    const remoteIds = new Set(remoteTxs.map(t => String(t.id)));
+    // ローカルにしかない取引があるか確認（書き戻しトリガー）
+    const remoteIds = new Set(filteredRemoteTxs.map(t => String(t.id)));
     hasLocalOnly = localTxs.some(t => !remoteIds.has(String(t.id)));
+  } else if (filteredRemoteTxs.length > 0) {
+    transactionsByYear[year] = filteredRemoteTxs;
   } else {
-    transactionsByYear[year] = remoteTxs.length > 0 ? remoteTxs : localTxs;
+    transactionsByYear[year] = localTxs;
   }
 
   loadedYears.add(year);
