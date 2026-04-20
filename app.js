@@ -430,6 +430,9 @@ function renderSettle() {
   const bfDiff = (bfActualPaid - bfShouldPay) + netBfToGf;
 
   // 入金額カード計算
+  // 入金済み = 共用財布への振替 + 個人支出（直接支払いも実質的な入金とみなす）
+  const gfEffDep = gfToJoint + gfExp;
+  const bfEffDep = bfToJoint + bfExp;
   // 片方でも超えたら両方の目標を次の倍数へ引き上げ
   const settleRatio = getRatioForDate(viewMonth + '-01');
   const gfDepBase   = Number(settleRatio.gfRatio) || 0;
@@ -437,12 +440,12 @@ function renderSettle() {
   let depMultiplier = 1;
   while (
     gfDepBase > 0 && bfDepBase > 0 &&
-    (gfToJoint > gfDepBase * depMultiplier || bfToJoint > bfDepBase * depMultiplier)
+    (gfEffDep > gfDepBase * depMultiplier || bfEffDep > bfDepBase * depMultiplier)
   ) { depMultiplier++; }
   const gfDepTarget = gfDepBase * depMultiplier;
   const bfDepTarget = bfDepBase * depMultiplier;
-  const gfDepRemain = Math.max(0, gfDepTarget - gfToJoint);
-  const bfDepRemain = Math.max(0, bfDepTarget - bfToJoint);
+  const gfDepRemain = Math.max(0, gfDepTarget - gfEffDep);
+  const bfDepRemain = Math.max(0, bfDepTarget - bfEffDep);
 
   // 相手への立替額（自分が相手の個人費用を立替払い）
   const gfAdvForBf = txs.filter(t => t.type === 'advance' && t.payer === 'girlfriend' && t.beneficiary === 'boyfriend').reduce((s,t) => s+t.amount, 0);
@@ -459,14 +462,17 @@ function renderSettle() {
       ? (() => { const r = getRatioForDate(allSettleTxs[0].date); return `（${settings.gfName} ${r.gfRatio} : ${settings.bfName} ${r.bfRatio}）`; })()
       : '（複数の割合を適用）';
 
-  // 各人の詳細テキスト（支出 / 財布からの返金 / 相手への立替）
+  // 各人の詳細テキスト（支出＋振替 / 財布からの返金 / 相手への立替）
+  // 支出 = 個人支出 + 共用財布への振替（どちらも実質的な支出）
+  const gfExpTotal = gfExp + gfToJoint;
+  const bfExpTotal = bfExp + bfToJoint;
   const gfDetailParts = [];
-  if (gfExp > 0)      gfDetailParts.push(`支出 ${fmt(gfExp)}`);
+  if (gfExpTotal > 0) gfDetailParts.push(`支出 ${fmt(gfExpTotal)}`);
   if (jointToGf > 0)  gfDetailParts.push(`財布からの返金 ${fmt(jointToGf)}`);
   if (gfAdvForBf > 0) gfDetailParts.push(`${settings.bfName}の立替 ${fmt(gfAdvForBf)}`);
 
   const bfDetailParts = [];
-  if (bfExp > 0)      bfDetailParts.push(`支出 ${fmt(bfExp)}`);
+  if (bfExpTotal > 0) bfDetailParts.push(`支出 ${fmt(bfExpTotal)}`);
   if (jointToBf > 0)  bfDetailParts.push(`財布からの返金 ${fmt(jointToBf)}`);
   if (bfAdvForGf > 0) bfDetailParts.push(`${settings.gfName}の立替 ${fmt(bfAdvForGf)}`);
 
@@ -477,13 +483,13 @@ function renderSettle() {
       <div class="bd-info">
         <div class="bd-name">💳 入金額</div>
         <div class="bd-detail" style="margin-top:4px">
-          ${settings.gfName}：入金済 ${fmt(gfToJoint)} ／ ${fmt(gfDepTarget)}
+          ${settings.gfName}：入金済 ${fmt(gfEffDep)} ／ ${fmt(gfDepTarget)}
           ${gfDepRemain > 0
             ? `→ <b>あと ${fmt(gfDepRemain)}</b>`
             : `→ <b class="deposit-done">達成 ✓</b>`}
         </div>
         <div class="bd-detail" style="margin-top:4px">
-          ${settings.bfName}：入金済 ${fmt(bfToJoint)} ／ ${fmt(bfDepTarget)}
+          ${settings.bfName}：入金済 ${fmt(bfEffDep)} ／ ${fmt(bfDepTarget)}
           ${bfDepRemain > 0
             ? `→ <b>あと ${fmt(bfDepRemain)}</b>`
             : `→ <b class="deposit-done">達成 ✓</b>`}
@@ -569,8 +575,48 @@ function renderSettle() {
   const allGfDiff = (allGfActual - allGfShouldPay) - allNetBfToGf;
   const allBfDiff = (allBfActual - allBfShouldPay) + allNetBfToGf;
 
+  // ── 全期間の入金額カード（差額ベース）──
+  // 完了済みサイクル数 = min(⌊全期間GF入金/gfDepBase⌋, ⌊全期間BF入金/bfDepBase⌋)
+  // 今サイクル分 = 全期間入金 − 完了済み×base
+  const allDepRatio  = getRatioForDate(new Date().toISOString().slice(0,10));
+  const allGfDepBase = Number(allDepRatio.gfRatio) || 0;
+  const allBfDepBase = Number(allDepRatio.bfRatio) || 0;
+  let allDepCard = '';
+  if (allGfDepBase > 0 && allBfDepBase > 0) {
+    const completedCycles = Math.min(
+      Math.floor(allGfToJoint / allGfDepBase),
+      Math.floor(allBfToJoint / allBfDepBase)
+    );
+    const gfCycle = allGfToJoint - completedCycles * allGfDepBase;
+    const bfCycle = allBfToJoint - completedCycles * allBfDepBase;
+    let allDepMul = 1;
+    while (gfCycle > allGfDepBase * allDepMul || bfCycle > allBfDepBase * allDepMul) { allDepMul++; }
+    const allGfDepTarget = allGfDepBase * allDepMul;
+    const allBfDepTarget = allBfDepBase * allDepMul;
+    const allGfDepRemain = Math.max(0, allGfDepTarget - gfCycle);
+    const allBfDepRemain = Math.max(0, allBfDepTarget - bfCycle);
+    allDepCard = `
+    <div class="breakdown-item deposit-target-item">
+      <div class="bd-info">
+        <div class="bd-name">💳 入金額</div>
+        <div class="bd-detail" style="margin-top:4px">
+          ${settings.gfName}：入金済 ${fmt(gfCycle)} ／ ${fmt(allGfDepTarget)}
+          ${allGfDepRemain > 0
+            ? `→ <b>あと ${fmt(allGfDepRemain)}</b>`
+            : `→ <b class="deposit-done">達成 ✓</b>`}
+        </div>
+        <div class="bd-detail" style="margin-top:4px">
+          ${settings.bfName}：入金済 ${fmt(bfCycle)} ／ ${fmt(allBfDepTarget)}
+          ${allBfDepRemain > 0
+            ? `→ <b>あと ${fmt(allBfDepRemain)}</b>`
+            : `→ <b class="deposit-done">達成 ✓</b>`}
+        </div>
+      </div>
+    </div>`;
+  }
+
   const bdAllEl = document.getElementById('breakdown-list-all');
-  bdAllEl.innerHTML = `
+  bdAllEl.innerHTML = allDepCard + `
     <div class="breakdown-item">
       <div class="bd-info">
         <div class="bd-name">${settings.gfName}</div>
