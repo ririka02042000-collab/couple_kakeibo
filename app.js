@@ -1312,10 +1312,14 @@ async function syncFromGitHub() {
     }
 
     // 設定データを読み込み
+    // ローカルに未送信の設定変更がある場合（タイマー発火待ち）はGitHub値で上書きしない
     const { content: setContent, sha: setSha } = await ghRead(GH_SET_PATH);
     if (setContent) {
       ghSetSha = setSha;
-      applySettingsFromCsv(setContent);
+      if (ghSetSyncTimer === null) {
+        // ペンディング中の書き込みがない場合のみ適用（ローカル優先）
+        applySettingsFromCsv(setContent);
+      }
     }
 
     updateGhStatus('ok');
