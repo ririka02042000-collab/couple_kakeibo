@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- ピンク背景 -->
+  <rect width="100" height="100" fill="#f9a0c0"/>
+
+  <!-- がま口の本体（楕円） -->
+  <ellipse cx="50" cy="66" rx="31" ry="24"
+           fill="#f9a0c0" stroke="#3a2535" stroke-width="2.8"/>
+
+  <!-- がま口の口金フレーム（上の曲線） -->
+  <path d="M22,57 C20,42 36,36 50,36 C64,36 80,42 78,57"
+        fill="none" stroke="#3a2535" stroke-width="2.8" stroke-linecap="round"/>
+
+  <!-- 左のつまみ（丸） -->
+  <circle cx="42" cy="27" r="5.5"
+          fill="#f9a0c0" stroke="#3a2535" stroke-width="2.4"/>
+
+  <!-- 右のつまみ（丸） -->
+  <circle cx="58" cy="27" r="5.5"
+          fill="#f9a0c0" stroke="#3a2535" stroke-width="2.4"/>
+
+  <!-- ¥¥ テキスト -->
+  <text x="50" y="73"
+        font-family="Arial, sans-serif"
+        font-size="21"
+        font-weight="900"
+        fill="#3a2535"
+        text-anchor="middle"
+        letter-spacing="2">¥¥</text>
+</svg>
