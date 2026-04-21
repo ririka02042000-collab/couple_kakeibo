@@ -418,9 +418,9 @@ function renderSettle() {
     gfShouldPay -= t.amount * (Number(r.gfRatio)||1) / rt;
     bfShouldPay -= t.amount * (Number(r.bfRatio)||1) / rt;
   });
-  // 立替・個人負担：100%その人の負担（立替元は誰でも）
-  const monthJointPersonalGf = txs.filter(t => t.beneficiary === 'girlfriend' && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
-  const monthJointPersonalBf = txs.filter(t => t.beneficiary === 'boyfriend'  && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
+  // 立替・個人負担：100%その人の負担（joint払いは共用財布の問題なので除外、gf/bf払いのみ）
+  const monthJointPersonalGf = txs.filter(t => t.beneficiary === 'girlfriend' && (t.type === 'expense' || t.type === 'advance') && t.payer !== 'joint').reduce((s,t) => s+t.amount, 0);
+  const monthJointPersonalBf = txs.filter(t => t.beneficiary === 'boyfriend'  && (t.type === 'expense' || t.type === 'advance') && t.payer !== 'joint').reduce((s,t) => s+t.amount, 0);
   gfShouldPay += monthJointPersonalGf;
   bfShouldPay += monthJointPersonalBf;
 
@@ -430,9 +430,12 @@ function renderSettle() {
   const bfDiff = (bfActualPaid - bfShouldPay) + netBfToGf;
 
   // 入金額カード計算
-  // 入金済み = 共用財布への振替 + 個人支出（直接支払いも実質的な入金とみなす）
-  const gfEffDep = gfToJoint + gfExp;
-  const bfEffDep = bfToJoint + bfExp;
+  // 共用財布が個人費用を立替えた額（入金済みから差し引く）
+  const jointPersonalForGf = txs.filter(t => t.payer === 'joint' && t.beneficiary === 'girlfriend' && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
+  const jointPersonalForBf = txs.filter(t => t.payer === 'joint' && t.beneficiary === 'boyfriend'  && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
+  // 入金済み = 共用財布への振替 + 個人支出 − 共用財布による立替（ホームの支出と一致）
+  const gfEffDep = gfToJoint + gfExp - jointPersonalForGf;
+  const bfEffDep = bfToJoint + bfExp - jointPersonalForBf;
   // 片方でも超えたら両方の目標を次の倍数へ引き上げ
   const settleRatio = getRatioForDate(viewMonth + '-01');
   const gfDepBase   = Number(settleRatio.gfRatio) || 0;
@@ -512,8 +515,8 @@ function renderSettle() {
         <div class="bd-detail">${gfDetailParts.join(' / ') || '取引なし'}</div>
       </div>
       <div class="bd-amount ${gfDiff>=0?'positive':'negative'}">
-        ${gfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(gfDiff)))}
-        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${gfDiff>=0?'未回収':'支払済超過'}</div>
+        ${gfDiff>=0?'▽':'△'}${fmt(Math.round(Math.abs(gfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${gfDiff>=0?'貰う':'払う'}</div>
       </div>
     </div>
     <div class="breakdown-item">
@@ -522,8 +525,8 @@ function renderSettle() {
         <div class="bd-detail">${bfDetailParts.join(' / ') || '取引なし'}</div>
       </div>
       <div class="bd-amount ${bfDiff<=0?'negative':'positive'}">
-        ${bfDiff<=0?'▽':'△'}${fmt(Math.round(Math.abs(bfDiff)))}
-        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${bfDiff<=0?'未払い':'払いすぎ'}</div>
+        ${bfDiff<=0?'△':'▽'}${fmt(Math.round(Math.abs(bfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${bfDiff<=0?'払う':'貰う'}</div>
       </div>
     </div>
   `;
@@ -563,8 +566,8 @@ function renderSettle() {
     allGfShouldPay -= t.amount * (Number(r.gfRatio)||1) / rt;
     allBfShouldPay -= t.amount * (Number(r.bfRatio)||1) / rt;
   });
-  // 立替・個人負担：100%その人の負担（立替元は誰でも）
-  allTx.filter(t => t.beneficiary && (t.type === 'expense' || t.type === 'advance')).forEach(t => {
+  // 立替・個人負担：100%その人の負担（joint払いは共用財布の問題なので除外、gf/bf払いのみ）
+  allTx.filter(t => t.beneficiary && (t.type === 'expense' || t.type === 'advance') && t.payer !== 'joint').forEach(t => {
     if (t.beneficiary === 'girlfriend') allGfShouldPay += t.amount;
     else if (t.beneficiary === 'boyfriend') allBfShouldPay += t.amount;
   });
@@ -622,8 +625,8 @@ function renderSettle() {
         <div class="bd-name">${settings.gfName}</div>
       </div>
       <div class="bd-amount ${allGfDiff>=0?'positive':'negative'}">
-        ${allGfDiff>=0?'△':'▲'}${fmt(Math.round(Math.abs(allGfDiff)))}
-        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${allGfDiff>=0?'未回収':'支払済超過'}</div>
+        ${allGfDiff>=0?'▽':'△'}${fmt(Math.round(Math.abs(allGfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${allGfDiff>=0?'貰う':'払う'}</div>
       </div>
     </div>
     <div class="breakdown-item">
@@ -631,8 +634,8 @@ function renderSettle() {
         <div class="bd-name">${settings.bfName}</div>
       </div>
       <div class="bd-amount ${allBfDiff<=0?'negative':'positive'}">
-        ${allBfDiff<=0?'▽':'△'}${fmt(Math.round(Math.abs(allBfDiff)))}
-        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${allBfDiff<=0?'未払い':'払いすぎ'}</div>
+        ${allBfDiff<=0?'△':'▽'}${fmt(Math.round(Math.abs(allBfDiff)))}
+        <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${allBfDiff<=0?'払う':'貰う'}</div>
       </div>
     </div>
   `;
@@ -852,7 +855,7 @@ document.querySelectorAll('.advance-to-btn').forEach(btn => {
 
 // ── 保存（新規追加 / 編集共通） ──────────────────────
 document.getElementById('btn-save').addEventListener('click', () => {
-  const amount = parseInt(document.getElementById('input-amount').value);
+  const amount = parseCalcAmount(document.getElementById('input-amount').value);
   const date   = document.getElementById('input-date').value;
   const note   = document.getElementById('input-note').value.trim();
   const cat    = document.getElementById('input-category').value;
@@ -1487,6 +1490,79 @@ document.addEventListener('visibilitychange', () => {
       .catch(e => console.error('visibility settings write error:', e));
   }
 });
+
+// ── 電卓式パース ──────────────────────────────────
+function parseCalcAmount(str) {
+  if (!str) return NaN;
+  const cleaned = String(str)
+    .replace(/[,，\s]/g, '')
+    .replace(/×/g, '*')
+    .replace(/÷/g, '/')
+    .replace(/−/g, '-');
+  if (!/^[\d+\-*/.()]+$/.test(cleaned)) return NaN;
+  try {
+    // eslint-disable-next-line no-new-func
+    const result = Function('"use strict"; return (' + cleaned + ')')();
+    if (!isFinite(result) || result <= 0) return NaN;
+    return Math.floor(result);
+  } catch(e) { return NaN; }
+}
+
+// ── 電卓キーボード ──────────────────────────────────
+(function() {
+  const calcKb  = document.getElementById('calc-kb');
+  const amtInput = document.getElementById('input-amount');
+  if (!calcKb || !amtInput) return;
+
+  function showCalc() { calcKb.classList.add('active'); }
+  function hideCalc() { calcKb.classList.remove('active'); }
+
+  // フォーカス時に電卓表示
+  amtInput.addEventListener('focus', showCalc);
+  // フォーカス外れたら電卓を閉じる（calc ボタンは mousedown.preventDefault で blur させない）
+  amtInput.addEventListener('blur', () => {
+    // 少し遅延：calc ボタン click が先に発火してから閉じる
+    setTimeout(hideCalc, 200);
+  });
+
+  // ── ボタン処理 ──
+  function handleCalcBtn(btn) {
+    const action = btn.dataset.action;
+    const val    = btn.dataset.val;
+    let cur = amtInput.value;
+
+    if (action === 'clear') {
+      amtInput.value = '';
+    } else if (action === 'back') {
+      amtInput.value = cur.slice(0, -1);
+    } else if (action === 'eq' || action === 'done') {
+      const r = parseCalcAmount(cur);
+      if (r !== null && !isNaN(r)) amtInput.value = String(r);
+      if (action === 'done') { amtInput.blur(); }
+    } else if (val) {
+      const isOp = (c) => '+-×÷−*/'.includes(c);
+      if (isOp(val) && isOp(cur.slice(-1))) {
+        amtInput.value = cur.slice(0, -1) + val; // 演算子を置換
+      } else {
+        amtInput.value = cur + val;
+      }
+    }
+  }
+
+  calcKb.querySelectorAll('.calc-btn').forEach(btn => {
+    // mousedown で preventDefault → input のフォーカスを維持（OS キーボードを出さない）
+    btn.addEventListener('mousedown', e => e.preventDefault());
+    btn.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
+    btn.addEventListener('touchend', e => { e.preventDefault(); handleCalcBtn(btn); });
+    btn.addEventListener('click', () => handleCalcBtn(btn));
+  });
+
+  // キャンセル・保存ボタンで電卓を閉じる
+  document.getElementById('btn-cancel')?.addEventListener('click', hideCalc);
+  document.getElementById('modal-overlay')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-overlay')) hideCalc();
+  });
+})();
 
 // ── 初期化 ────────────────────────────────────────
 applyNames();

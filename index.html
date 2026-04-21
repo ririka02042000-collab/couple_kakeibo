@@ -198,7 +198,7 @@
 
       <div class="form-group">
         <label>金額 (円)</label>
-        <input type="number" id="input-amount" placeholder="0" min="1" inputmode="numeric">
+        <input type="text" id="input-amount" placeholder="0" inputmode="none" autocomplete="off">
       </div>
 
       <div class="form-group" id="category-group">
@@ -301,6 +301,35 @@
         <button class="btn-cancel" id="settings-cancel">キャンセル</button>
         <button class="btn-save" id="settings-save">保存</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 電卓キーボード -->
+  <div id="calc-kb" class="calc-kb">
+    <div class="calc-kb-grid">
+      <button type="button" class="calc-btn calc-fn"  data-action="clear">AC</button>
+      <button type="button" class="calc-btn calc-fn"  data-action="back">⌫</button>
+      <button type="button" class="calc-btn calc-op"  data-val="÷">÷</button>
+      <button type="button" class="calc-btn calc-op"  data-val="×">×</button>
+
+      <button type="button" class="calc-btn"          data-val="7">7</button>
+      <button type="button" class="calc-btn"          data-val="8">8</button>
+      <button type="button" class="calc-btn"          data-val="9">9</button>
+      <button type="button" class="calc-btn calc-op"  data-val="−">−</button>
+
+      <button type="button" class="calc-btn"          data-val="4">4</button>
+      <button type="button" class="calc-btn"          data-val="5">5</button>
+      <button type="button" class="calc-btn"          data-val="6">6</button>
+      <button type="button" class="calc-btn calc-op"  data-val="+">+</button>
+
+      <button type="button" class="calc-btn"          data-val="1">1</button>
+      <button type="button" class="calc-btn"          data-val="2">2</button>
+      <button type="button" class="calc-btn"          data-val="3">3</button>
+      <button type="button" class="calc-btn calc-eq"  data-action="eq">=</button>
+
+      <button type="button" class="calc-btn calc-zero" data-val="0">0</button>
+      <button type="button" class="calc-btn"           data-val=".">.</button>
+      <button type="button" class="calc-btn calc-done" data-action="done">✓</button>
     </div>
   </div>
 
