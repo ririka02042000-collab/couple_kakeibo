@@ -433,9 +433,9 @@ function renderSettle() {
   // 共用財布が個人費用を立替えた額（入金済みから差し引く）
   const jointPersonalForGf = txs.filter(t => t.payer === 'joint' && t.beneficiary === 'girlfriend' && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
   const jointPersonalForBf = txs.filter(t => t.payer === 'joint' && t.beneficiary === 'boyfriend'  && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
-  // 入金済み = 共用財布への振替 + 個人支出 − 共用財布による立替（ホームの支出と一致）
-  const gfEffDep = gfToJoint + gfExp - jointPersonalForGf;
-  const bfEffDep = bfToJoint + bfExp - jointPersonalForBf;
+  // 入金済み = 共用財布への振替 + 個人支出 − 共用財布による立替 − 共用財布からの振替（ホームの支出と一致）
+  const gfEffDep = gfToJoint + gfExp - jointPersonalForGf - jointToGf;
+  const bfEffDep = bfToJoint + bfExp - jointPersonalForBf - jointToBf;
   // 片方でも超えたら両方の目標を次の倍数へ引き上げ
   const settleRatio = getRatioForDate(viewMonth + '-01');
   const gfDepBase   = Number(settleRatio.gfRatio) || 0;
@@ -578,20 +578,24 @@ function renderSettle() {
   const allGfDiff = (allGfActual - allGfShouldPay) - allNetBfToGf;
   const allBfDiff = (allBfActual - allBfShouldPay) + allNetBfToGf;
 
-  // ── 全期間の入金額カード（差額ベース）──
-  // 完了済みサイクル数 = min(⌊全期間GF入金/gfDepBase⌋, ⌊全期間BF入金/bfDepBase⌋)
-  // 今サイクル分 = 全期間入金 − 完了済み×base
+  // ── 全期間の入金額カード ──
+  // 入金済み = 振替→共用 + 個人支出 − 共用財布による立替 − 共用財布からの振替（今月と同じ式）
+  const allJointPersonalForGf = allTx.filter(t => t.payer === 'joint' && t.beneficiary === 'girlfriend' && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
+  const allJointPersonalForBf = allTx.filter(t => t.payer === 'joint' && t.beneficiary === 'boyfriend'  && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
+  const allGfEffDep = allGfToJoint + allGfExp - allJointPersonalForGf - allJointToGf;
+  const allBfEffDep = allBfToJoint + allBfExp - allJointPersonalForBf - allJointToBf;
+
   const allDepRatio  = getRatioForDate(new Date().toISOString().slice(0,10));
   const allGfDepBase = Number(allDepRatio.gfRatio) || 0;
   const allBfDepBase = Number(allDepRatio.bfRatio) || 0;
   let allDepCard = '';
   if (allGfDepBase > 0 && allBfDepBase > 0) {
     const completedCycles = Math.min(
-      Math.floor(allGfToJoint / allGfDepBase),
-      Math.floor(allBfToJoint / allBfDepBase)
+      Math.floor(allGfEffDep / allGfDepBase),
+      Math.floor(allBfEffDep / allBfDepBase)
     );
-    const gfCycle = allGfToJoint - completedCycles * allGfDepBase;
-    const bfCycle = allBfToJoint - completedCycles * allBfDepBase;
+    const gfCycle = allGfEffDep - completedCycles * allGfDepBase;
+    const bfCycle = allBfEffDep - completedCycles * allBfDepBase;
     let allDepMul = 1;
     while (gfCycle > allGfDepBase * allDepMul || bfCycle > allBfDepBase * allDepMul) { allDepMul++; }
     const allGfDepTarget = allGfDepBase * allDepMul;
