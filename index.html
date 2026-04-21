@@ -23,7 +23,6 @@
       <span id="gh-sync-status-header" class="gh-sync-status-header"></span>
       <button class="reload-btn" id="reload-btn" title="リロード">↺</button>
       <button class="settings-btn" id="settings-btn">⚙️</button>
-      <button class="logout-btn" id="logout-btn">ログアウト</button>
     </div>
   </header>
 
@@ -243,7 +242,10 @@
   <div class="modal-overlay" id="settings-overlay">
     <div class="modal settings-modal">
       <div class="modal-handle"></div>
-      <h2>設定</h2>
+      <div class="settings-modal-header">
+        <h2>設定</h2>
+        <button class="logout-btn" id="logout-btn">ログアウト</button>
+      </div>
       <div class="form-group">
         <label>👩 彼女の名前</label>
         <input type="text" id="setting-gf-name" placeholder="彼女">
