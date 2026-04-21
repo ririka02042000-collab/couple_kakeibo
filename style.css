@@ -887,6 +887,60 @@ body {
 .btn-save   { background: linear-gradient(135deg, #7c3aed, #a78bfa); color: white; }
 .btn-cancel:hover, .btn-save:hover { opacity: 0.85; }
 
+/* ── トークン失効アラート ── */
+.token-alert-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 9000;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.token-alert-overlay.active {
+  display: flex;
+}
+.token-alert-box {
+  background: white;
+  border-radius: 18px;
+  padding: 28px 24px 24px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+.token-alert-icon {
+  font-size: 2.4rem;
+  margin-bottom: 12px;
+}
+.token-alert-msg {
+  font-size: 0.92rem;
+  line-height: 1.7;
+  color: var(--text);
+  margin-bottom: 20px;
+}
+.token-alert-sub {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.token-alert-btn {
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #7c3aed, #a78bfa);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.token-alert-btn:hover { opacity: 0.85; }
+
 /* ── 電卓キーボード ── */
 .calc-kb {
   position: fixed;

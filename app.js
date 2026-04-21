@@ -1246,6 +1246,36 @@ function updateGhStatus(state, detail) {
       hdr.className   = `gh-sync-status-header ${s.cls}`;
     }
   }
+
+  // トークン失効（401）の検出・解除
+  if (state === 'error' && detail === '401') {
+    localStorage.setItem('kakeibo_token_expired', '1');
+    showTokenExpiredAlert();
+  } else if (state === 'ok') {
+    localStorage.removeItem('kakeibo_token_expired');
+  }
+}
+
+// ── トークン失効アラート ────────────────────────────
+function showTokenExpiredAlert() {
+  // すでにこのセッションで表示済みなら何もしない
+  if (sessionStorage.getItem('token_alert_shown')) return;
+  const overlay = document.getElementById('token-expired-overlay');
+  if (overlay) overlay.classList.add('active');
+}
+
+function initTokenExpiredAlert() {
+  // ページ読み込み時：localStorage フラグが立っていたら表示
+  if (localStorage.getItem('kakeibo_token_expired') !== '1') return;
+  showTokenExpiredAlert();
+  const btn = document.getElementById('token-expired-ok');
+  if (btn) {
+    btn.addEventListener('click', () => {
+      sessionStorage.setItem('token_alert_shown', '1');
+      const overlay = document.getElementById('token-expired-overlay');
+      if (overlay) overlay.classList.remove('active');
+    });
+  }
 }
 
 // GitHub から読み込み（起動時：当年のみ、他は遅延）
@@ -1567,4 +1597,5 @@ function parseCalcAmount(str) {
 // ── 初期化 ────────────────────────────────────────
 applyNames();
 renderAll();
-syncFromGitHub(); // GitHub API で自動同期
+initTokenExpiredAlert(); // トークン失効アラートの初期化
+syncFromGitHub();        // GitHub API で自動同期
