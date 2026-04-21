@@ -21,6 +21,7 @@
     <h1>RT経費精算</h1>
     <div class="header-actions">
       <span id="gh-sync-status-header" class="gh-sync-status-header"></span>
+      <button class="reload-btn" id="reload-btn" title="リロード">↺</button>
       <button class="settings-btn" id="settings-btn">⚙️</button>
       <button class="logout-btn" id="logout-btn">ログアウト</button>
     </div>
@@ -123,7 +124,7 @@
 
   <!-- 精算タブ -->
   <div class="tab-content" id="tab-settle">
-    <div class="section-title">今月の内訳</div>
+    <div class="section-title" id="settle-month-title">今月の内訳</div>
     <div class="breakdown-list" id="breakdown-list"></div>
     <div class="section-title" style="margin-top:20px">全期間の内訳</div>
     <div class="breakdown-list" id="breakdown-list-all"></div>

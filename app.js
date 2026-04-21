@@ -361,6 +361,14 @@ function renderTxList(containerId, list, showDelete) {
 
 // ── 精算描画 ──────────────────────────────────────
 function renderSettle() {
+  // 見出しを動的更新（当月なら「今月の内訳」、それ以外は「YYYY年M月の内訳」）
+  const titleEl = document.getElementById('settle-month-title');
+  if (titleEl) {
+    const [y, m] = viewMonth.split('-');
+    const isCurrentMonth = viewMonth === localYearMonth();
+    titleEl.textContent = isCurrentMonth ? '今月の内訳' : `${y}年${parseInt(m)}月の内訳`;
+  }
+
   const txs = monthTx();
 
   // 個人支出（精算対象：共用財布払いは除外）
@@ -515,7 +523,7 @@ function renderSettle() {
         <div class="bd-detail">${gfDetailParts.join(' / ') || '取引なし'}</div>
       </div>
       <div class="bd-amount ${gfDiff>=0?'positive':'negative'}">
-        ${gfDiff>=0?'▽':'△'}${fmt(Math.round(Math.abs(gfDiff)))}
+        ${gfDiff>=0?'△':'▽'}${fmt(Math.round(Math.abs(gfDiff)))}
         <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${gfDiff>=0?'貰う':'払う'}</div>
       </div>
     </div>
@@ -525,7 +533,7 @@ function renderSettle() {
         <div class="bd-detail">${bfDetailParts.join(' / ') || '取引なし'}</div>
       </div>
       <div class="bd-amount ${bfDiff<=0?'negative':'positive'}">
-        ${bfDiff<=0?'△':'▽'}${fmt(Math.round(Math.abs(bfDiff)))}
+        ${bfDiff<=0?'▽':'△'}${fmt(Math.round(Math.abs(bfDiff)))}
         <div style="font-size:0.65rem;font-weight:400;color:var(--muted)">${bfDiff<=0?'払う':'貰う'}</div>
       </div>
     </div>
@@ -1471,6 +1479,11 @@ function parseTransactionsCsv(text) {
     toggle.classList.toggle('open', !isOpen);
     body.style.display = isOpen ? 'none' : 'block';
   });
+});
+
+// ── リロード ──────────────────────────────────────
+document.getElementById('reload-btn').addEventListener('click', () => {
+  location.reload();
 });
 
 // ── ログアウト ────────────────────────────────────

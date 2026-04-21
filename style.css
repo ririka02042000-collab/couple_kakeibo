@@ -61,6 +61,21 @@ body {
   padding: 4px;
   border-radius: 8px;
 }
+.reload-btn {
+  background: none;
+  border: none;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 8px;
+  line-height: 1;
+  transition: color 0.2s, transform 0.3s;
+}
+.reload-btn:hover { color: var(--primary); }
+.reload-btn:active { transform: rotate(180deg); }
+
 .logout-btn {
   background: none;
   border: 1px solid var(--primary);
