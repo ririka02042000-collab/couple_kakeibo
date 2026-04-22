@@ -41,7 +41,6 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1745054255000,transfer,boyfriend,200,その他,"",2026-03-29,joint,
 1745054256000,transfer,girlfriend,7900,その他,"",2026-03-29,joint,
 1745054257000,transfer,boyfriend,12000,その他,"",2026-03-29,joint,
-1776852254559,advance,boyfriend,500,食費,"",2026-03-31,,girlfriend
 1745054234000,expense,girlfriend,746,食費,"マルハチ",2026-04-01,,
 1745054235000,expense,girlfriend,590,食費,"天丼",2026-04-04,,
 1745054236000,expense,boyfriend,2260,食費,"塩元帥",2026-04-05,,
@@ -64,3 +63,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1745054260000,expense,joint,3100,食費,"サイゼリヤ",2026-04-18,,
 1745054261000,expense,joint,3465,娯楽費,"ジグソーパズル",2026-04-18,,
 1745054262000,expense,boyfriend,2111,食費,"パン",2026-04-19,,
+1776857671852,expense,girlfriend,588,食費,"",2026-04-19,,
