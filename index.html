@@ -125,7 +125,7 @@
   <div class="tab-content" id="tab-settle">
     <div class="section-title" id="settle-month-title">今月の内訳</div>
     <div class="breakdown-list" id="breakdown-list"></div>
-    <div class="section-title" style="margin-top:20px">全期間の内訳</div>
+    <div class="section-title" id="settle-all-title" style="margin-top:20px">全期間の内訳</div>
     <div class="breakdown-list" id="breakdown-list-all"></div>
   </div>
 
@@ -267,8 +267,8 @@
         </div>
         <div class="collapse-body" id="ratio-add-body">
           <div class="form-group" style="margin-bottom:8px;margin-top:8px">
-            <label style="font-size:0.72rem">適用開始日</label>
-            <input type="date" id="setting-ratio-date">
+            <label style="font-size:0.72rem">適用開始月（月初から適用）</label>
+            <input type="month" id="setting-ratio-date">
           </div>
           <div class="ratio-row">
             <div class="ratio-item">

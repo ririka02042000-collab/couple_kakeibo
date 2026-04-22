@@ -492,6 +492,12 @@ body {
 }
 .deposit-done { color: var(--income); }
 
+/* 割合変更前の精算カード */
+.prev-settle-item {
+  background: #fef9ec;
+  border-left: 3px solid #f59e0b;
+}
+
 /* 追加ボタン */
 .add-btn {
   position: fixed;

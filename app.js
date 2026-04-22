@@ -359,6 +359,51 @@ function renderTxList(containerId, list, showDelete) {
   });
 }
 
+// ── 精算差額計算ヘルパー ─────────────────────────────
+function calcSettlementDiff(txArray) {
+  const gfExp = txArray.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const bfExp = txArray.filter(t=>t.payer==='boyfriend' &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+  const gfToJoint = txArray.filter(t=>t.type==='transfer'&&t.payer==='girlfriend'&&t.transferTo==='joint').reduce((s,t)=>s+t.amount,0);
+  const bfToJoint = txArray.filter(t=>t.type==='transfer'&&t.payer==='boyfriend' &&t.transferTo==='joint').reduce((s,t)=>s+t.amount,0);
+  const jointToGf = txArray.filter(t=>t.type==='transfer'&&t.payer==='joint'&&t.transferTo==='girlfriend').reduce((s,t)=>s+t.amount,0);
+  const jointToBf = txArray.filter(t=>t.type==='transfer'&&t.payer==='joint'&&t.transferTo==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
+  const gfAdvancePaid = txArray.filter(t=>t.type==='advance'&&t.payer==='girlfriend').reduce((s,t)=>s+t.amount,0);
+  const bfAdvancePaid = txArray.filter(t=>t.type==='advance'&&t.payer==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
+  const gfActual = gfExp + gfToJoint - jointToGf + gfAdvancePaid;
+  const bfActual = bfExp + bfToJoint - jointToBf + bfAdvancePaid;
+
+  let gfShouldPay = 0, bfShouldPay = 0;
+  txArray.filter(t=>t.type==='expense'&&(t.payer==='girlfriend'||t.payer==='boyfriend')&&!t.beneficiary).forEach(t=>{
+    const r = getRatioForDate(t.date);
+    const rt = (Number(r.gfRatio)||1) + (Number(r.bfRatio)||1);
+    gfShouldPay += t.amount * (Number(r.gfRatio)||1) / rt;
+    bfShouldPay += t.amount * (Number(r.bfRatio)||1) / rt;
+  });
+  txArray.filter(t=>t.type==='transfer'&&t.transferTo==='joint'&&t.payer!=='joint').forEach(t=>{
+    const r = getRatioForDate(t.date);
+    const rt = (Number(r.gfRatio)||1) + (Number(r.bfRatio)||1);
+    gfShouldPay += t.amount * (Number(r.gfRatio)||1) / rt;
+    bfShouldPay += t.amount * (Number(r.bfRatio)||1) / rt;
+  });
+  txArray.filter(t=>t.type==='transfer'&&t.payer==='joint'&&(t.transferTo==='girlfriend'||t.transferTo==='boyfriend')).forEach(t=>{
+    const r = getRatioForDate(t.date);
+    const rt = (Number(r.gfRatio)||1) + (Number(r.bfRatio)||1);
+    gfShouldPay -= t.amount * (Number(r.gfRatio)||1) / rt;
+    bfShouldPay -= t.amount * (Number(r.bfRatio)||1) / rt;
+  });
+  txArray.filter(t=>t.beneficiary&&(t.type==='expense'||t.type==='advance')&&t.payer!=='joint').forEach(t=>{
+    if (t.beneficiary==='girlfriend') gfShouldPay += t.amount;
+    else if (t.beneficiary==='boyfriend') bfShouldPay += t.amount;
+  });
+
+  const bfToGf = txArray.filter(t=>t.type==='transfer'&&t.payer==='boyfriend' &&t.transferTo==='girlfriend').reduce((s,t)=>s+t.amount,0);
+  const gfToBf = txArray.filter(t=>t.type==='transfer'&&t.payer==='girlfriend'&&t.transferTo==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
+  const netBfToGf = bfToGf - gfToBf;
+  const gfDiff = (gfActual - gfShouldPay) - netBfToGf;
+  const bfDiff = (bfActual - bfShouldPay) + netBfToGf;
+  return { gfDiff, bfDiff };
+}
+
 // ── 精算描画 ──────────────────────────────────────
 function renderSettle() {
   // 見出しを動的更新（当月なら「今月の内訳」、それ以外は「YYYY年M月の内訳」）
@@ -540,7 +585,47 @@ function renderSettle() {
   `;
 
   // ── 全期間の内訳 ──────────────────────────────────
-  const allTx = transactions;
+  // 現在の割合開始日を取得
+  const sortedRatioHistory = [...(settings.ratioHistory || [])].sort((a,b) => a.from.localeCompare(b.from));
+  const currentRatioEntry  = sortedRatioHistory.length > 0 ? sortedRatioHistory[sortedRatioHistory.length - 1] : null;
+  const currentRatioStart  = currentRatioEntry ? currentRatioEntry.from : null;
+
+  // 割合が複数ある場合のみ、現在の割合開始日で絞り込む
+  const hasMultipleRatios = sortedRatioHistory.length > 1;
+
+  // 全期間タイトルを動的更新（割合変更がある場合のみ「以降」表示）
+  const allTitleEl = document.getElementById('settle-all-title');
+  if (allTitleEl) {
+    if (hasMultipleRatios && currentRatioStart) {
+      const [ay, am] = currentRatioStart.slice(0,7).split('-');
+      allTitleEl.textContent = `${ay}年${parseInt(am)}月以降の内訳`;
+    } else {
+      allTitleEl.textContent = '全期間の内訳';
+    }
+  }
+
+  // 現在の割合開始日以降のみを全期間計算対象とする（割合が複数ある場合のみ絞り込み）
+  const allTx  = (hasMultipleRatios && currentRatioStart) ? transactions.filter(t => t.date >= currentRatioStart) : transactions;
+  // 割合変更前の取引（割合が複数ある場合のみ）
+  const prevTx = (hasMultipleRatios && currentRatioStart) ? transactions.filter(t => t.date < currentRatioStart) : [];
+
+  // 割合変更前の精算カード
+  let prevSettleHtml = '';
+  if (prevTx.length > 0) {
+    const { gfDiff: prevGfDiff } = calcSettlementDiff(prevTx);
+    const prevAmt = Math.round(Math.abs(prevGfDiff));
+    if (prevAmt > 0) {
+      const payer = prevGfDiff > 0 ? settings.bfName : settings.gfName;
+      const payee = prevGfDiff > 0 ? settings.gfName : settings.bfName;
+      prevSettleHtml = `
+    <div class="breakdown-item prev-settle-item">
+      <div class="bd-info">
+        <div class="bd-name">🔄 割合変更前の精算</div>
+        <div class="bd-detail">${payer}は${payee}に ${fmt(prevAmt)} 払う</div>
+      </div>
+    </div>`;
+    }
+  }
   const allGfExp     = allTx.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const allBfExp     = allTx.filter(t=>t.payer==='boyfriend' &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
   const allGfToJoint = allTx.filter(t=>t.type==='transfer'&&t.payer==='girlfriend'&&t.transferTo==='joint').reduce((s,t)=>s+t.amount,0);
@@ -631,7 +716,7 @@ function renderSettle() {
   }
 
   const bdAllEl = document.getElementById('breakdown-list-all');
-  bdAllEl.innerHTML = allDepCard + `
+  bdAllEl.innerHTML = prevSettleHtml + allDepCard + `
     <div class="breakdown-item">
       <div class="bd-info">
         <div class="bd-name">${settings.gfName}</div>
@@ -1014,9 +1099,10 @@ document.getElementById('settings-save').addEventListener('click', () => {
   settings.gfName = document.getElementById('setting-gf-name').value.trim() || '彼女';
   settings.bfName = document.getElementById('setting-bf-name').value.trim() || '彼氏';
 
-  const gfR  = parseFloat(document.getElementById('setting-gf-ratio').value);
-  const bfR  = parseFloat(document.getElementById('setting-bf-ratio').value);
-  const date = document.getElementById('setting-ratio-date').value;
+  const gfR     = parseFloat(document.getElementById('setting-gf-ratio').value);
+  const bfR     = parseFloat(document.getElementById('setting-bf-ratio').value);
+  const rawDate = document.getElementById('setting-ratio-date').value; // "YYYY-MM"
+  const date    = rawDate ? rawDate + '-01' : ''; // 月初(1日)に固定
 
   // 割合と日付が両方入力されている場合のみ追加
   if (gfR > 0 && bfR > 0 && date) {
