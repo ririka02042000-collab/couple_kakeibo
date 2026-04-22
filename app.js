@@ -56,6 +56,7 @@ function localYearMonth() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
 }
 let viewMonth        = localYearMonth(); // "YYYY-MM"
+let settleViewMonth  = localYearMonth(); // "YYYY-MM"（精算タブ独立）
 let historyViewMonth = localYearMonth(); // "YYYY-MM"
 let historyShowAll   = false; // 全期間表示フラグ（起動時は当月）
 let editingTxId      = null;  // 編集中の取引ID（nullなら新規追加）
@@ -406,15 +407,19 @@ function calcSettlementDiff(txArray) {
 
 // ── 精算描画 ──────────────────────────────────────
 function renderSettle() {
+  // 月入力欄を同期
+  const settleMonthInput = document.getElementById('settle-month-input');
+  if (settleMonthInput) settleMonthInput.value = settleViewMonth;
+
   // 見出しを動的更新（当月なら「今月の内訳」、それ以外は「YYYY年M月の内訳」）
   const titleEl = document.getElementById('settle-month-title');
   if (titleEl) {
-    const [y, m] = viewMonth.split('-');
-    const isCurrentMonth = viewMonth === localYearMonth();
+    const [y, m] = settleViewMonth.split('-');
+    const isCurrentMonth = settleViewMonth === localYearMonth();
     titleEl.textContent = isCurrentMonth ? '今月の内訳' : `${y}年${parseInt(m)}月の内訳`;
   }
 
-  const txs = monthTx();
+  const txs = transactions.filter(t => t.date.startsWith(settleViewMonth));
 
   // 個人支出（精算対象：共用財布払いは除外）
   const gfExp  = txs.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
@@ -490,7 +495,7 @@ function renderSettle() {
   const gfEffDep = gfToJoint + gfExp - jointPersonalForGf - jointToGf;
   const bfEffDep = bfToJoint + bfExp - jointPersonalForBf - jointToBf;
   // 片方でも超えたら両方の目標を次の倍数へ引き上げ
-  const settleRatio = getRatioForDate(viewMonth + '-01');
+  const settleRatio = getRatioForDate(settleViewMonth + '-01');
   const gfDepBase   = Number(settleRatio.gfRatio) || 0;
   const bfDepBase   = Number(settleRatio.bfRatio) || 0;
   let depMultiplier = 1;
@@ -842,6 +847,28 @@ document.getElementById('history-month-input').addEventListener('change', async 
   historyViewMonth = e.target.value;
   await ensureYearLoaded(historyViewMonth.slice(0,4));
   renderHistory();
+});
+
+// ── 月ナビ（精算） ────────────────────────────────
+document.getElementById('settle-prev-month').addEventListener('click', async () => {
+  const d = new Date(settleViewMonth + '-01');
+  d.setMonth(d.getMonth() - 1);
+  settleViewMonth = d.toISOString().slice(0,7);
+  await ensureYearLoaded(settleViewMonth.slice(0,4));
+  renderSettle();
+});
+document.getElementById('settle-next-month').addEventListener('click', async () => {
+  const d = new Date(settleViewMonth + '-01');
+  d.setMonth(d.getMonth() + 1);
+  settleViewMonth = d.toISOString().slice(0,7);
+  await ensureYearLoaded(settleViewMonth.slice(0,4));
+  renderSettle();
+});
+document.getElementById('settle-month-input').addEventListener('change', async e => {
+  if (!e.target.value) return;
+  settleViewMonth = e.target.value;
+  await ensureYearLoaded(settleViewMonth.slice(0,4));
+  renderSettle();
 });
 
 // ── モーダル ──────────────────────────────────────
@@ -1699,6 +1726,55 @@ function parseCalcAmount(str) {
   document.getElementById('modal-overlay')?.addEventListener('click', e => {
     if (e.target === document.getElementById('modal-overlay')) hideCalc();
   });
+})();
+
+// ── スワイプでタブ切り替え ────────────────────────────
+(function() {
+  const TABS = ['home', 'history', 'settle'];
+  let tx0 = 0, ty0 = 0;
+
+  function currentTabIdx() {
+    const active = document.querySelector('.tab-btn.active');
+    return TABS.indexOf(active?.dataset.tab ?? 'home');
+  }
+
+  async function goToTab(name) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    const btn = document.querySelector(`.tab-btn[data-tab="${name}"]`);
+    btn?.classList.add('active');
+    document.getElementById('tab-' + name)?.classList.add('active');
+    if (name === 'history') {
+      if (historyShowAll) await ensureAllYearsLoaded();
+      else await ensureYearLoaded(historyViewMonth.slice(0,4));
+      updateCsvYearSelect();
+      renderHistory();
+    }
+    if (name === 'settle') {
+      await ensureAllYearsLoaded();
+      renderSettle();
+    }
+  }
+
+  document.addEventListener('touchstart', e => {
+    // モーダル・電卓が開いていたら無視
+    if (document.querySelector('.modal-overlay.active')) return;
+    if (document.getElementById('calc-kb')?.classList.contains('active')) return;
+    tx0 = e.touches[0].clientX;
+    ty0 = e.touches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (document.querySelector('.modal-overlay.active')) return;
+    if (document.getElementById('calc-kb')?.classList.contains('active')) return;
+    const dx = e.changedTouches[0].clientX - tx0;
+    const dy = e.changedTouches[0].clientY - ty0;
+    // 横スワイプのみ判定（縦成分が横成分より大きい場合はスクロールとみなす）
+    if (Math.abs(dx) < 50 || Math.abs(dy) > Math.abs(dx) * 0.7) return;
+    const idx = currentTabIdx();
+    if (dx < 0 && idx < TABS.length - 1) goToTab(TABS[idx + 1]); // 左スワイプ→次のタブ
+    if (dx > 0 && idx > 0)              goToTab(TABS[idx - 1]); // 右スワイプ→前のタブ
+  }, { passive: true });
 })();
 
 // ── 初期化 ────────────────────────────────────────
