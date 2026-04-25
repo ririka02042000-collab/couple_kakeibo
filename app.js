@@ -610,19 +610,31 @@ function renderSettle() {
   let prevSettleHtml = '';
   if (prevTx.length > 0) {
     const { gfDiff: prevGfDiff, gfActual: prevGfActual, bfActual: prevBfActual } = calcSettlementDiff(prevTx);
-    const prevAmt        = Math.round(Math.abs(prevGfDiff));
-    const prevActualDiff = Math.round(Math.abs(prevGfActual - prevBfActual));
-    if (prevAmt > 0 || prevActualDiff > 0) {
+    const prevAmt = Math.round(Math.abs(prevGfDiff));
+    // 旧割合を取得（prevTx最後の取引日付で代表）
+    const prevR    = getRatioForDate(prevTx[prevTx.length - 1].date);
+    const prevRGf  = Number(prevR.gfRatio) || 1;
+    const prevRBf  = Number(prevR.bfRatio) || 1;
+    // gfDiff >= 0: gf overpayer (G=gfActual, r_over=r_gf, r_under=r_bf)
+    // gfDiff <  0: bf overpayer (G=bfActual, r_over=r_bf, r_under=r_gf)
+    const pG      = prevGfDiff >= 0 ? prevGfActual : prevBfActual;
+    const pB      = prevGfDiff >= 0 ? prevBfActual : prevGfActual;
+    const rOver   = prevGfDiff >= 0 ? prevRGf : prevRBf;
+    const rUnder  = prevGfDiff >= 0 ? prevRBf : prevRGf;
+    const pNum    = pG * rUnder - pB * rOver;
+    const prevDepAmt    = pNum > 0 ? Math.round(pNum / rOver)  : 0;
+    const prevRefundAmt = pNum > 0 ? Math.round(pNum / rUnder) : 0;
+    if (prevAmt > 0 || prevDepAmt > 0) {
       // gfDiff > 0 → gfが多く払っている(overpayer)、bfが少ない(underpayer)
       const overpayer  = prevGfDiff >= 0 ? settings.gfName : settings.bfName;
       const underpayer = prevGfDiff >= 0 ? settings.bfName : settings.gfName;
       const lines = [];
       if (prevAmt > 0)
         lines.push(`${underpayer}は${overpayer}に ${fmt(prevAmt)} 払う`);
-      if (prevActualDiff > 0)
-        lines.push(`${underpayer}は ${fmt(prevActualDiff)} 入金`);
-      if (prevActualDiff > 0)
-        lines.push(`${overpayer}は ${fmt(prevActualDiff)} 返金`);
+      if (prevDepAmt > 0)
+        lines.push(`${underpayer}は ${fmt(prevDepAmt)} 入金`);
+      if (prevRefundAmt > 0)
+        lines.push(`${overpayer}は ${fmt(prevRefundAmt)} 返金`);
       prevSettleHtml = `
     <div class="breakdown-item prev-settle-item">
       <div class="bd-info">
