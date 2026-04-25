@@ -66,3 +66,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1745054262000,expense,boyfriend,2111,食費,"パン",2026-04-19,,
 1776857671852,expense,girlfriend,588,食費,"",2026-04-19,,
 1776857753194,expense,boyfriend,1096,食費,"",2026-04-22,,
+1777087937591,expense,boyfriend,3480,食費,"",2026-04-25,,
