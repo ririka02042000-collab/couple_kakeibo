@@ -424,7 +424,12 @@ function calcSettlementDiff(txArray) {
   const netBfToGf = bfToGf - gfToBf;
   const gfDiff = (gfActual - gfShouldPay) - netBfToGf;
   const bfDiff = (bfActual - bfShouldPay) + netBfToGf;
-  return { gfDiff, bfDiff, gfActual, bfActual };
+  // 入金/返金計算用ベース（立替・個人支出を除外）
+  const gfJointPersonal = txArray.filter(t=>t.payer==='joint'&&t.beneficiary==='girlfriend'&&(t.type==='expense'||t.type==='advance')).reduce((s,t)=>s+t.amount,0);
+  const bfJointPersonal = txArray.filter(t=>t.payer==='joint'&&t.beneficiary==='boyfriend' &&(t.type==='expense'||t.type==='advance')).reduce((s,t)=>s+t.amount,0);
+  const gfBase = gfExp + gfToJoint - jointToGf - gfJointPersonal;
+  const bfBase = bfExp + bfToJoint - jointToBf - bfJointPersonal;
+  return { gfDiff, bfDiff, gfActual, bfActual, gfBase, bfBase };
 }
 
 // ── 精算描画 ──────────────────────────────────────
@@ -609,16 +614,17 @@ function renderSettle() {
   // 割合変更前の精算カード
   let prevSettleHtml = '';
   if (prevTx.length > 0) {
-    const { gfDiff: prevGfDiff, gfActual: prevGfActual, bfActual: prevBfActual } = calcSettlementDiff(prevTx);
+    const { gfDiff: prevGfDiff, gfBase: prevGfBase, bfBase: prevBfBase } = calcSettlementDiff(prevTx);
     const prevAmt = Math.round(Math.abs(prevGfDiff));
     // 旧割合を取得（prevTx最後の取引日付で代表）
     const prevR    = getRatioForDate(prevTx[prevTx.length - 1].date);
     const prevRGf  = Number(prevR.gfRatio) || 1;
     const prevRBf  = Number(prevR.bfRatio) || 1;
-    // gfDiff >= 0: gf overpayer (G=gfActual, r_over=r_gf, r_under=r_bf)
-    // gfDiff <  0: bf overpayer (G=bfActual, r_over=r_bf, r_under=r_gf)
-    const pG      = prevGfDiff >= 0 ? prevGfActual : prevBfActual;
-    const pB      = prevGfDiff >= 0 ? prevBfActual : prevGfActual;
+    // 入金/返金は立替・個人支出を除いたベース額で計算
+    // gfDiff >= 0: gf overpayer (G=gfBase, r_over=r_gf, r_under=r_bf)
+    // gfDiff <  0: bf overpayer (G=bfBase, r_over=r_bf, r_under=r_gf)
+    const pG      = prevGfDiff >= 0 ? prevGfBase : prevBfBase;
+    const pB      = prevGfDiff >= 0 ? prevBfBase : prevGfBase;
     const rOver   = prevGfDiff >= 0 ? prevRGf : prevRBf;
     const rUnder  = prevGfDiff >= 0 ? prevRBf : prevRGf;
     const pNum    = pG * rUnder - pB * rOver;
