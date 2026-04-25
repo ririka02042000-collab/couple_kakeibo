@@ -646,9 +646,9 @@ function renderSettle() {
       if (prevAmt > 0)
         lines.push(`${underpayer}は${overpayer}に ${fmt(prevAmt)} 払う`);
       if (prevDepAmt > 0)
-        lines.push(`${underpayer}は ${fmt(prevDepAmt)} 入金`);
+        lines.push(`または、${underpayer}は ${fmt(prevDepAmt)} 入金`);
       if (prevRefundAmt > 0)
-        lines.push(`${overpayer}は ${fmt(prevRefundAmt)} 返金`);
+        lines.push(`または、${overpayer}は ${fmt(prevRefundAmt)} 返金`);
       prevSettleHtml = `
     <div class="breakdown-item prev-settle-item">
       <div class="bd-info">
