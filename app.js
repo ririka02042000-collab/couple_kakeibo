@@ -492,9 +492,9 @@ function renderSettle() {
   const gfShouldPay = sharedTotal * (Number(r.gfRatio)||1) / rt;
   const bfShouldPay = sharedTotal * (Number(r.bfRatio)||1) / rt;
 
-  // 合計 = 支出 - 返金 - 本来負担
-  const gfDiff = gfExpTotal - jointToGf - gfShouldPay;
-  const bfDiff = bfExpTotal - jointToBf - bfShouldPay;
+  // 合計 = 支出 - 返金 - 本来負担 + 立替 - 個人支出
+  const gfDiff = gfExpTotal - jointToGf - gfShouldPay + netGfAdv - jointPersonalForGf;
+  const bfDiff = bfExpTotal - jointToBf - bfShouldPay + netBfAdv - jointPersonalForBf;
 
   // 入金額: 入金済 + 立替（net）
   const gfEffDep = gfDepBaseVal + netGfAdv;
@@ -514,15 +514,17 @@ function renderSettle() {
   // 割合ラベル
   const ratioLabel = `（${settings.gfName} ${r.gfRatio} : ${settings.bfName} ${r.bfRatio}）`;
 
-  // 詳細: 支出 / 返金（合計 = 支出 - 返金 - 本来負担）
+  // 詳細: 支出 / 返金 / 立替
   const fmtAdv = v => v >= 0 ? fmt(v) : `-${fmt(-v)}`;
   const gfDetailParts = [];
   if (gfExpTotal > 0) gfDetailParts.push(`支出 ${fmt(gfExpTotal)}`);
   if (jointToGf > 0)  gfDetailParts.push(`返金 -${fmt(jointToGf)}`);
+  if (netGfAdv !== 0) gfDetailParts.push(`立替 ${fmtAdv(netGfAdv)}`);
 
   const bfDetailParts = [];
   if (bfExpTotal > 0) bfDetailParts.push(`支出 ${fmt(bfExpTotal)}`);
   if (jointToBf > 0)  bfDetailParts.push(`返金 -${fmt(jointToBf)}`);
+  if (netBfAdv !== 0) bfDetailParts.push(`立替 ${fmtAdv(netBfAdv)}`);
 
   // 入金額表示: 入金済 ¥X + 立替 ¥Y ／ ¥Z → あと ¥W
   const fmtDepLine = (base, adv, target, remain) => {
@@ -654,21 +656,23 @@ function renderSettle() {
   const allGfShouldPay  = allSharedTotal * (Number(allR.gfRatio)||1) / allRt;
   const allBfShouldPay  = allSharedTotal * (Number(allR.bfRatio)||1) / allRt;
 
-  // 合計 = 支出 - 返金 - 本来負担
-  const allGfDiff = allGfExpTotal - allJointToGf - allGfShouldPay;
-  const allBfDiff = allBfExpTotal - allJointToBf - allBfShouldPay;
+  // 合計 = 支出 - 返金 - 本来負担 + 立替 - 個人支出
+  const allGfDiff = allGfExpTotal - allJointToGf - allGfShouldPay + allNetGfAdv - allJointPersonalForGf;
+  const allBfDiff = allBfExpTotal - allJointToBf - allBfShouldPay + allNetBfAdv - allJointPersonalForBf;
 
   const allGfEffDep = allGfDepBaseVal + allNetGfAdv;
   const allBfEffDep = allBfDepBaseVal + allNetBfAdv;
 
-  // 詳細: 支出 / 返金
+  // 詳細: 支出 / 返金 / 立替
   const fmtAdvA = v => v >= 0 ? fmt(v) : `-${fmt(-v)}`;
   const allGfDetailParts = [];
   if (allGfExpTotal > 0) allGfDetailParts.push(`支出 ${fmt(allGfExpTotal)}`);
   if (allJointToGf > 0)  allGfDetailParts.push(`返金 -${fmt(allJointToGf)}`);
+  if (allNetGfAdv !== 0) allGfDetailParts.push(`立替 ${fmtAdvA(allNetGfAdv)}`);
   const allBfDetailParts = [];
   if (allBfExpTotal > 0) allBfDetailParts.push(`支出 ${fmt(allBfExpTotal)}`);
   if (allJointToBf > 0)  allBfDetailParts.push(`返金 -${fmt(allJointToBf)}`);
+  if (allNetBfAdv !== 0) allBfDetailParts.push(`立替 ${fmtAdvA(allNetBfAdv)}`);
 
   // ── 全期間の入金額カード ──
   const allGfDepBase = Number(allR.gfRatio) || 0;
