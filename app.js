@@ -628,8 +628,16 @@ function renderSettle() {
     const rOver   = prevGfDiff >= 0 ? prevRGf : prevRBf;
     const rUnder  = prevGfDiff >= 0 ? prevRBf : prevRGf;
     const pNum    = pG * rUnder - pB * rOver;
-    const prevDepAmt    = pNum > 0 ? Math.round(pNum / rOver)  : 0;
-    const prevRefundAmt = pNum > 0 ? Math.round(pNum / rUnder) : 0;
+    // 立替・個人支出を割合計算後に加減算
+    const prevGfAdvForBf = prevTx.filter(t=>t.type==='advance'&&t.payer==='girlfriend'&&t.beneficiary==='boyfriend').reduce((s,t)=>s+t.amount,0);
+    const prevBfAdvForGf = prevTx.filter(t=>t.type==='advance'&&t.payer==='boyfriend'&&t.beneficiary==='girlfriend').reduce((s,t)=>s+t.amount,0);
+    const prevGfJP = prevTx.filter(t=>t.payer==='joint'&&t.beneficiary==='girlfriend'&&(t.type==='expense'||t.type==='advance')).reduce((s,t)=>s+t.amount,0);
+    const prevBfJP = prevTx.filter(t=>t.payer==='joint'&&t.beneficiary==='boyfriend'&&(t.type==='expense'||t.type==='advance')).reduce((s,t)=>s+t.amount,0);
+    const prevAdj = prevGfDiff >= 0
+      ? (prevGfAdvForBf - prevBfAdvForGf) + (prevBfJP - prevGfJP)
+      : (prevBfAdvForGf - prevGfAdvForBf) + (prevGfJP - prevBfJP);
+    const prevDepAmt    = pNum > 0 ? Math.round(pNum / rOver  + prevAdj) : 0;
+    const prevRefundAmt = pNum > 0 ? Math.round(pNum / rUnder + prevAdj) : 0;
     if (prevAmt > 0 || prevDepAmt > 0) {
       // gfDiff > 0 → gfが多く払っている(overpayer)、bfが少ない(underpayer)
       const overpayer  = prevGfDiff >= 0 ? settings.gfName : settings.bfName;
