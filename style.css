@@ -550,6 +550,8 @@ body {
   padding: 10px 20px 36px;
   transform: translateY(100%);
   transition: transform 0.3s cubic-bezier(.32,1,.32,1);
+  overflow-y: auto;
+  max-height: 92vh;
 }
 
 .modal-overlay.active .modal { transform: translateY(0); }
