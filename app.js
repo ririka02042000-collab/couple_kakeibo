@@ -424,7 +424,7 @@ function calcSettlementDiff(txArray) {
   const netBfToGf = bfToGf - gfToBf;
   const gfDiff = (gfActual - gfShouldPay) - netBfToGf;
   const bfDiff = (bfActual - bfShouldPay) + netBfToGf;
-  return { gfDiff, bfDiff };
+  return { gfDiff, bfDiff, gfActual, bfActual };
 }
 
 // ── 精算描画 ──────────────────────────────────────
@@ -609,16 +609,25 @@ function renderSettle() {
   // 割合変更前の精算カード
   let prevSettleHtml = '';
   if (prevTx.length > 0) {
-    const { gfDiff: prevGfDiff } = calcSettlementDiff(prevTx);
-    const prevAmt = Math.round(Math.abs(prevGfDiff));
-    if (prevAmt > 0) {
-      const payer = prevGfDiff > 0 ? settings.bfName : settings.gfName;
-      const payee = prevGfDiff > 0 ? settings.gfName : settings.bfName;
+    const { gfDiff: prevGfDiff, gfActual: prevGfActual, bfActual: prevBfActual } = calcSettlementDiff(prevTx);
+    const prevAmt        = Math.round(Math.abs(prevGfDiff));
+    const prevActualDiff = Math.round(Math.abs(prevGfActual - prevBfActual));
+    if (prevAmt > 0 || prevActualDiff > 0) {
+      // gfDiff > 0 → gfが多く払っている(overpayer)、bfが少ない(underpayer)
+      const overpayer  = prevGfDiff >= 0 ? settings.gfName : settings.bfName;
+      const underpayer = prevGfDiff >= 0 ? settings.bfName : settings.gfName;
+      const lines = [];
+      if (prevAmt > 0)
+        lines.push(`${underpayer}は${overpayer}に ${fmt(prevAmt)} 払う`);
+      if (prevActualDiff > 0)
+        lines.push(`${underpayer}は ${fmt(prevActualDiff)} 入金`);
+      if (prevActualDiff > 0)
+        lines.push(`${overpayer}は ${fmt(prevActualDiff)} 返金`);
       prevSettleHtml = `
     <div class="breakdown-item prev-settle-item">
       <div class="bd-info">
         <div class="bd-name">🔄 割合変更前の精算</div>
-        <div class="bd-detail">${payer}は${payee}に ${fmt(prevAmt)} 払う</div>
+        ${lines.map(l => `<div class="bd-detail">${l}</div>`).join('')}
       </div>
     </div>`;
     }
