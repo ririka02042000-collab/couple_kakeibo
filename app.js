@@ -616,12 +616,32 @@ function renderSettle() {
   // 割合変更前の精算カード
   let prevSettleHtml = '';
   if (prevTx.length > 0) {
-    const { gfDiff: prevGfDiff, gfBase: prevGfBase, bfBase: prevBfBase } = calcSettlementDiff(prevTx);
-    const prevAmt = Math.round(Math.abs(prevGfDiff));
+    const { gfBase: prevGfBase, bfBase: prevBfBase } = calcSettlementDiff(prevTx);
     // 旧割合を取得（prevTx最後の取引日付で代表）
     const prevR    = getRatioForDate(prevTx[prevTx.length - 1].date);
     const prevRGf  = Number(prevR.gfRatio) || 1;
     const prevRBf  = Number(prevR.bfRatio) || 1;
+    const prevRt   = prevRGf + prevRBf;
+    // 月次と同じ計算式でprevGfDiffを算出
+    const prevGfExp     = prevTx.filter(t=>t.payer==='girlfriend'&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+    const prevBfExp     = prevTx.filter(t=>t.payer==='boyfriend' &&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+    const prevGfToJoint = prevTx.filter(t=>t.type==='transfer'&&t.payer==='girlfriend'&&t.transferTo==='joint').reduce((s,t)=>s+t.amount,0);
+    const prevBfToJoint = prevTx.filter(t=>t.type==='transfer'&&t.payer==='boyfriend' &&t.transferTo==='joint').reduce((s,t)=>s+t.amount,0);
+    const prevJointToGf = prevTx.filter(t=>t.type==='transfer'&&t.payer==='joint'&&t.transferTo==='girlfriend').reduce((s,t)=>s+t.amount,0);
+    const prevJointToBf = prevTx.filter(t=>t.type==='transfer'&&t.payer==='joint'&&t.transferTo==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
+    const prevGfAdvForBf = prevTx.filter(t=>t.type==='advance'&&t.payer==='girlfriend'&&t.beneficiary==='boyfriend').reduce((s,t)=>s+t.amount,0);
+    const prevBfAdvForGf = prevTx.filter(t=>t.type==='advance'&&t.payer==='boyfriend'&&t.beneficiary==='girlfriend').reduce((s,t)=>s+t.amount,0);
+    const prevGfJP = prevTx.filter(t=>t.payer==='joint'&&t.beneficiary==='girlfriend'&&(t.type==='expense'||t.type==='advance')).reduce((s,t)=>s+t.amount,0);
+    const prevBfJP = prevTx.filter(t=>t.payer==='joint'&&t.beneficiary==='boyfriend' &&(t.type==='expense'||t.type==='advance')).reduce((s,t)=>s+t.amount,0);
+    const prevGfExpTotal  = prevGfExp + prevGfToJoint;
+    const prevBfExpTotal  = prevBfExp + prevBfToJoint;
+    const prevGfDepBase   = prevGfExpTotal - prevJointToGf - prevGfJP;
+    const prevBfDepBase   = prevBfExpTotal - prevJointToBf - prevBfJP;
+    const prevShared      = prevGfDepBase + prevBfDepBase;
+    const prevGfShouldPay = prevShared * prevRGf / prevRt;
+    const prevNetGfAdv    = prevGfAdvForBf - prevBfAdvForGf;
+    const prevGfDiff = prevGfExpTotal - prevJointToGf - prevGfShouldPay + prevNetGfAdv - prevGfJP;
+    const prevAmt = Math.round(Math.abs(prevGfDiff));
     // 入金/返金は立替・個人支出を除いたベース額で計算
     // gfDiff >= 0: gf overpayer (G=gfBase, r_over=r_gf, r_under=r_bf)
     // gfDiff <  0: bf overpayer (G=bfBase, r_over=r_bf, r_under=r_gf)
@@ -631,10 +651,6 @@ function renderSettle() {
     const rUnder  = prevGfDiff >= 0 ? prevRBf : prevRGf;
     const pNum    = pG * rUnder - pB * rOver;
     // 立替・個人支出を割合計算後に加減算
-    const prevGfAdvForBf = prevTx.filter(t=>t.type==='advance'&&t.payer==='girlfriend'&&t.beneficiary==='boyfriend').reduce((s,t)=>s+t.amount,0);
-    const prevBfAdvForGf = prevTx.filter(t=>t.type==='advance'&&t.payer==='boyfriend'&&t.beneficiary==='girlfriend').reduce((s,t)=>s+t.amount,0);
-    const prevGfJP = prevTx.filter(t=>t.payer==='joint'&&t.beneficiary==='girlfriend'&&(t.type==='expense'||t.type==='advance')).reduce((s,t)=>s+t.amount,0);
-    const prevBfJP = prevTx.filter(t=>t.payer==='joint'&&t.beneficiary==='boyfriend'&&(t.type==='expense'||t.type==='advance')).reduce((s,t)=>s+t.amount,0);
     const prevAdj = prevGfDiff >= 0
       ? (prevGfAdvForBf - prevBfAdvForGf) + (prevBfJP - prevGfJP)
       : (prevBfAdvForGf - prevGfAdvForBf) + (prevGfJP - prevBfJP);
