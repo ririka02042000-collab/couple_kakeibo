@@ -69,3 +69,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1777129341475,expense,boyfriend,2679,食費,"丸源",2026-04-26,,
 1777178022896,expense,girlfriend,2200,食費,"ランチ",2026-04-26,,
 1777187381285,expense,girlfriend,412,娯楽費,"タネ",2026-04-26,,
+1777189084115,expense,boyfriend,2856,食費,"マルハチ",2026-04-26,,
