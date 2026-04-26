@@ -490,12 +490,10 @@ function renderSettle() {
   const gfDepBaseVal = gfExpTotal - jointToGf - jointPersonalForGf;
   const bfDepBaseVal = bfExpTotal - jointToBf - jointPersonalForBf;
 
-  // 本来負担額 = (支出-返金) × 割合（立替・個人支出は含まない）
+  // 本来負担額 = (支出-返金-共用財布立替) × 割合（立替を除く）
   const r = getRatioForDate(settleViewMonth + '-01');
   const rt = (Number(r.gfRatio)||1) + (Number(r.bfRatio)||1);
-  const sharedBaseGf = gfExpTotal - jointToGf;
-  const sharedBaseBf = bfExpTotal - jointToBf;
-  const sharedTotal = sharedBaseGf + sharedBaseBf;
+  const sharedTotal = gfDepBaseVal + bfDepBaseVal;
   const gfShouldPay = sharedTotal * (Number(r.gfRatio)||1) / rt;
   const bfShouldPay = sharedTotal * (Number(r.bfRatio)||1) / rt;
 
