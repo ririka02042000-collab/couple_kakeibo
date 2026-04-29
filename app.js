@@ -734,15 +734,25 @@ function renderSettle() {
   const allBfDepBase = Number(allR.bfRatio) || 0;
   let allDepCard = '';
   if (allGfDepBase > 0 && allBfDepBase > 0) {
-    // 完了済みサイクルを除いた現サイクルの入金額
-    const allGfCycleAmt  = allGfEffDep % allGfDepBase;
-    const allBfCycleAmt  = allBfEffDep % allBfDepBase;
+    // 完了済みサイクルを除いた現サイクルの入金額（2人で同じサイクルに揃える）
+    const completedCycles = Math.min(
+      Math.floor(allGfEffDep / allGfDepBase),
+      Math.floor(allBfEffDep / allBfDepBase)
+    );
+    const allGfCycleAmt  = allGfEffDep - completedCycles * allGfDepBase;
+    const allBfCycleAmt  = allBfEffDep - completedCycles * allBfDepBase;
     const allGfDepRemain = Math.max(0, allGfDepBase - allGfCycleAmt);
     const allBfDepRemain = Math.max(0, allBfDepBase - allBfCycleAmt);
     const fmtDepLineA = (cycleAmt, target, remain) => {
-      const remStr = remain > 0
-        ? `→ <b>あと ${fmt(remain)}</b>`
-        : `→ <b class="deposit-done">達成 ✓</b>`;
+      let remStr;
+      if (remain <= 0) {
+        const extra = cycleAmt - target;
+        remStr = extra > 0
+          ? `→ <b class="deposit-done">達成 ✓ (+${fmt(extra)})</b>`
+          : `→ <b class="deposit-done">達成 ✓</b>`;
+      } else {
+        remStr = `→ <b>あと ${fmt(remain)}</b>`;
+      }
       return `入金済 ${fmtS(cycleAmt)} ／ ${fmt(target)} ${remStr}`;
     };
     allDepCard = `
