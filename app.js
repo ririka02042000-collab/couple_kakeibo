@@ -38,6 +38,7 @@ let availableYears = [];              // GitHub に存在する年一覧
 let ghSetSha       = null;
 let ghSyncTimers   = {};              // { year: timerID }
 let ghSyncing      = false;           // syncFromGitHub 実行中フラグ（多重起動防止）
+let ghWriteQueues  = {};              // { year: Promise } 年ごとの書き込みキュー（並行書き込み防止）
 // 削除済みID集合：同期時にリモートから復活させないために記録
 let deletedIds = new Set(JSON.parse(localStorage.getItem('kakeibo_deleted') || '[]'));
 function saveDeletedIds() {
@@ -1203,6 +1204,7 @@ if (ghConfig.token === '（設定済み）') { ghConfig.token = ''; saveGhConfig
 
 const ghYearPath  = year => `kakeibo-history-${year}.csv`;
 const GH_SET_PATH = 'kakeibo-settings.csv';
+const GH_DEL_PATH = 'kakeibo-deleted.csv';
 
 function saveGhConfig() {
   localStorage.setItem('kakeibo_gh', JSON.stringify(ghConfig));
@@ -1266,6 +1268,30 @@ function rebuildTransactions() {
   transactions = Object.values(transactionsByYear).flat();
   transactions.sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
   localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
+}
+
+// 削除済みIDをGitHubと双方向同期する
+// ・リモートの削除IDをローカルに反映（相手の削除を受け取る）
+// ・ローカルにしかない削除IDをリモートに書き戻す（自分の削除を相手に伝える）
+async function syncDeletedIds() {
+  const { content, sha } = await ghRead(GH_DEL_PATH);
+  const remoteIds = content ? content.trim().split(/\r?\n/).filter(Boolean) : [];
+  const localIds  = [...deletedIds].map(String);
+
+  // リモートの削除IDをローカルに追記
+  let localChanged = false;
+  remoteIds.forEach(id => {
+    if (!deletedIds.has(id)) { deletedIds.add(id); localChanged = true; }
+  });
+  if (localChanged) saveDeletedIds();
+
+  // ローカルにしかない削除IDがあればリモートに書き込む
+  const remoteSet  = new Set(remoteIds);
+  const needsWrite = localIds.some(id => !remoteSet.has(id));
+  if (needsWrite || !content) {
+    const merged = [...new Set([...remoteIds, ...localIds])].join('\n');
+    await ghWrite(GH_DEL_PATH, merged, sha);
+  }
 }
 
 // GitHub ルートディレクトリを一覧して年別ファイルを検出
@@ -1462,6 +1488,9 @@ async function syncFromGitHub() {
       await writeYearToGitHub(currentYear);
     }
 
+    // 削除済みIDをGitHubと同期（相手の削除を受け取り、自分の削除を送る）
+    await syncDeletedIds();
+
     // 設定データを読み込み
     // ローカルに未送信の設定変更がある場合（タイマー発火待ち）はGitHub値で上書きしない
     const { content: setContent, sha: setSha } = await ghRead(GH_SET_PATH);
@@ -1508,30 +1537,71 @@ function scheduleSyncYearToGitHub(year) {
 }
 
 // 年データを GitHub へ書き込む
+// ・同年の並行書き込みをキューで直列化（ghWriteQueues）
 // ・書き込み前に最新 SHA を取得（422回避）
-// ・マージはしない（削除・編集がリモートデータで上書きされるのを防ぐ）
-// ・409/422（SHA競合）時は SHA 再取得して1回リトライ
+// ・409/422（SHA競合）時はリモートデータをマージしてリトライ（最大3回）
 async function writeYearToGitHub(year) {
-  const yearTxs = transactionsByYear[year] || [];
+  // 同年への並行書き込みを防ぐ：前の書き込みが終わるまで待つ
+  const prev = ghWriteQueues[year] || Promise.resolve();
+  let unlock;
+  ghWriteQueues[year] = new Promise(r => { unlock = r; });
+  await prev;
 
-  // 409/422（SHA競合）が出ても最大3回リトライ（待ち時間を増やしながら）
+  try {
+    const MAX_RETRY = 3;
+    for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+      // 毎回最新 SHA とリモートの中身を取得
+      const { content: remoteContent, sha } = await ghRead(ghYearPath(year));
+      if (sha) ghYearShas[year] = sha;
+
+      // リトライ時（競合発生後）はリモートデータとマージして相手の変更を保持
+      if (attempt > 0 && remoteContent) {
+        const remoteTxs = parseTransactionsCsv(remoteContent);
+        const filteredRemote = remoteTxs.filter(t => !deletedIds.has(String(t.id)));
+        const localTxs = transactionsByYear[year] || [];
+        const merged = {};
+        filteredRemote.forEach(t => { merged[t.id] = t; }); // リモートを下敷きに
+        localTxs.forEach(t => { merged[t.id] = t; });        // ローカルで上書き
+        transactionsByYear[year] = Object.values(merged);
+        rebuildTransactions();
+      }
+
+      const yearTxs = transactionsByYear[year] || [];
+      try {
+        ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
+        return; // 成功
+      } catch(e) {
+        const is409 = /GitHub API (409|422)/.test(e.message);
+        if (is409 && attempt < MAX_RETRY - 1) {
+          // 少し待ってリトライ（500ms → 1000ms → 1500ms）
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        throw e; // 最終リトライも失敗、または別エラー
+      }
+    }
+  } finally {
+    unlock(); // 次の書き込みを解放
+  }
+}
+
+// 設定ファイルを GitHub へ書き込む（最大3回リトライ付き）
+async function writeSettingsToGitHub() {
   const MAX_RETRY = 3;
   for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
     // 毎回最新 SHA を取得
-    const { sha } = await ghRead(ghYearPath(year));
-    if (sha) ghYearShas[year] = sha;
-
+    const { sha } = await ghRead(GH_SET_PATH);
+    if (sha) ghSetSha = sha;
     try {
-      ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
+      ghSetSha = await ghWrite(GH_SET_PATH, buildSettingsCsv(), ghSetSha);
       return; // 成功
     } catch(e) {
       const is409 = /GitHub API (409|422)/.test(e.message);
       if (is409 && attempt < MAX_RETRY - 1) {
-        // 少し待ってリトライ（500ms → 1000ms → 1500ms）
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
         continue;
       }
-      throw e; // 最終リトライも失敗、または別エラー
+      throw e;
     }
   }
 }
@@ -1542,13 +1612,9 @@ function scheduleSyncSettingsToGitHub() {
   if (!ghConfig.token || !ghConfig.repo) return;
   clearTimeout(ghSetSyncTimer);
   ghSetSyncTimer = setTimeout(async () => {
+    ghSetSyncTimer = null;
     try {
-      // sha が未取得の場合は先に読んで取得（既存ファイルへの上書きに必要）
-      if (!ghSetSha) {
-        const { sha } = await ghRead(GH_SET_PATH);
-        if (sha) ghSetSha = sha;
-      }
-      ghSetSha = await ghWrite(GH_SET_PATH, buildSettingsCsv(), ghSetSha);
+      await writeSettingsToGitHub();
     } catch(e) {
       console.error('GitHub settings write error:', e);
     }
@@ -1675,20 +1741,7 @@ document.addEventListener('visibilitychange', () => {
   if (ghSetSyncTimer != null) {
     clearTimeout(ghSetSyncTimer);
     ghSetSyncTimer = null;
-    scheduleSyncSettingsToGitHub._flush?.();
-    ghRead(GH_SET_PATH).then(({ sha }) => {
-      if (sha) ghSetSha = sha;
-      return ghAPI(GH_SET_PATH, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: `update ${GH_SET_PATH}`,
-          content: toB64(buildSettingsCsv()),
-          branch:  ghConfig.branch || 'main',
-          ...(ghSetSha ? { sha: ghSetSha } : {})
-        })
-      });
-    }).then(r => { if (r?.content?.sha) ghSetSha = r.content.sha; })
+    writeSettingsToGitHub()
       .catch(e => console.error('visibility settings write error:', e));
   }
 });
