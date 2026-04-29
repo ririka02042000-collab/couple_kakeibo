@@ -75,3 +75,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1777425216823,expense,girlfriend,1005,食費,"パン3Bake",2026-04-29,,
 1777426240170,expense,girlfriend,460,食費,"パンネカヴァロ",2026-04-29,,
 1777429697142,expense,girlfriend,420,食費,"石井製パン店",2026-04-29,,
+1777436008526,expense,boyfriend,17900,娯楽費,"釣り堀",2026-04-29,,
