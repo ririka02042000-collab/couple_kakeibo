@@ -41,7 +41,6 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1745054255000,transfer,boyfriend,200,その他,"",2026-03-29,joint,
 1745054256000,transfer,girlfriend,7900,その他,"",2026-03-29,joint,
 1745054257000,transfer,boyfriend,12000,その他,"",2026-03-29,joint,
-1776852254559,advance,boyfriend,500,食費,"",2026-03-31,,girlfriend
 1745054234000,expense,girlfriend,746,食費,"マルハチ",2026-04-01,,
 1745054235000,expense,girlfriend,590,食費,"天丼",2026-04-04,,
 1745054236000,expense,boyfriend,2260,食費,"塩元帥",2026-04-05,,
@@ -68,3 +67,15 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1776857753194,expense,boyfriend,1096,食費,"",2026-04-22,,
 1777087937591,expense,boyfriend,3480,食費,"",2026-04-25,,
 1777129341475,expense,boyfriend,2679,食費,"丸源",2026-04-26,,
+1777178022896,expense,girlfriend,2200,食費,"ランチ",2026-04-26,,
+1777187381285,expense,girlfriend,412,娯楽費,"タネ",2026-04-26,,
+1777191434484,expense,boyfriend,2578,食費,"マルハチ",2026-04-26,,
+1777380407769,expense,boyfriend,2770,食費,"二国ラーメン",2026-04-28,,
+1777425216823,expense,girlfriend,1005,食費,"パン3Bake",2026-04-29,,
+1777426240170,expense,girlfriend,460,食費,"パンネカヴァロ",2026-04-29,,
+1777429697142,expense,girlfriend,420,食費,"石井製パン店",2026-04-29,,
+1777436008526,expense,boyfriend,17900,娯楽費,"釣り堀",2026-04-29,,
+1777436037537,expense,girlfriend,3400,食費,"牡蠣と釜飯",2026-04-29,,
+1777444253747,expense,girlfriend,1123,食費,"ジュース",2026-04-29,,
+1777451822102,expense,girlfriend,545,食費,"マルハチ",2026-04-29,,
+1777451832837,advance,girlfriend,160,食費,"肉",2026-04-29,,boyfriend
