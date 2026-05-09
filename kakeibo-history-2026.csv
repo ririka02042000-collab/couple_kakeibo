@@ -88,6 +88,6 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1778326862819,expense,boyfriend,430,食費,"たこ焼き",2026-05-09,,
 1778326888051,expense,boyfriend,759,娯楽費,"虫除けネット",2026-05-09,,
 1778326906606,expense,boyfriend,1886,娯楽費,"お菓子館",2026-05-09,,
-1778326923417,expense,boyfriend,1681,娯楽費,"ローソン",2026-05-09,,
+1778326923417,expense,boyfriend,1681,食費,"ローソン",2026-05-09,,
 1778327001985,expense,boyfriend,1045,娯楽費,"ポン酢",2026-05-09,,
 1778327020220,expense,boyfriend,7600,食費,"焼肉",2026-05-09,,
