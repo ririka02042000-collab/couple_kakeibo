@@ -80,3 +80,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1777451822102,expense,girlfriend,385,食費,"マルハチ",2026-04-29,,
 1777451832837,advance,girlfriend,160,食費,"肉",2026-04-29,,boyfriend
 1778296398955,expense,girlfriend,2892,食費,"ブレッドマン",2026-05-09,,
+1778296423432,expense,boyfriend,200,交通費,"駐車場",2026-05-09,,
