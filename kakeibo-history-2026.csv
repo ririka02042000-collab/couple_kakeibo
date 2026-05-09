@@ -77,5 +77,6 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1777436008526,expense,boyfriend,17900,娯楽費,"釣り堀",2026-04-29,,
 1777436037537,expense,girlfriend,3400,食費,"牡蠣と釜飯",2026-04-29,,
 1777444253747,expense,girlfriend,1123,食費,"ジュース",2026-04-29,,
-1777451822102,expense,girlfriend,545,食費,"マルハチ",2026-04-29,,
+1777451822102,expense,girlfriend,385,食費,"マルハチ",2026-04-29,,
 1777451832837,advance,girlfriend,160,食費,"肉",2026-04-29,,boyfriend
+1778296398955,expense,girlfriend,2892,食費,"ブレッドマン",2026-05-09,,
