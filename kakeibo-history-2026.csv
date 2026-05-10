@@ -92,3 +92,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1778327020220,expense,boyfriend,7600,食費,"焼肉",2026-05-09,,
 1778392664466,expense,girlfriend,2800,娯楽費,"つり",2026-05-10,,
 1778392686926,expense,boyfriend,3160,娯楽費,"つり",2026-05-10,,
+1778395453864,expense,girlfriend,2640,食費,"海鮮丼",2026-05-10,,
