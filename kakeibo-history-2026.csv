@@ -98,3 +98,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1778407475181,expense,girlfriend,221,食費,"スーパー",2026-05-10,,
 1778407642647,expense,girlfriend,300,食費,"たこ焼き",2026-05-10,,
 1778409341915,expense,boyfriend,830,娯楽費,"ラー油",2026-05-10,,
+1778410400733,expense,girlfriend,537,食費,"あじ",2026-05-10,,
