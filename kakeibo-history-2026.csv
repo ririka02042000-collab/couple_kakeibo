@@ -100,3 +100,5 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1778410400733,expense,girlfriend,537,食費,"あじ",2026-05-10,,
 1778576527653,expense,girlfriend,822,食費,"マルハチ",2026-05-12,,
 1778898218162,expense,girlfriend,3000,娯楽費,"潮干狩り",2026-05-16,,
+1778898246813,expense,girlfriend,1700,食費,"",2026-05-16,,
+1778898261366,advance,girlfriend,600,娯楽費,"ビール",2026-05-16,,boyfriend
