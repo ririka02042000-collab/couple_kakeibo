@@ -103,3 +103,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1778898246813,expense,girlfriend,1700,食費,"",2026-05-16,,
 1778898261366,advance,girlfriend,600,娯楽費,"ビール",2026-05-16,,boyfriend
 1778898335760,expense,boyfriend,500,娯楽費,"駐車場",2026-05-16,,
+1778905785830,expense,girlfriend,524,食費,"コンビニ",2026-05-16,,
