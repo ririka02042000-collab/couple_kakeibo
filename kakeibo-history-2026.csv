@@ -107,3 +107,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1778912707915,expense,girlfriend,542,食費,"マルアイ",2026-05-16,,
 1778981577192,expense,girlfriend,1130,食費,"マクド",2026-05-16,,
 1778983796471,expense,girlfriend,1920,食費,"モーニング",2026-05-17,,
+1778987816956,advance,girlfriend,10000,その他,"",2026-05-17,,boyfriend
