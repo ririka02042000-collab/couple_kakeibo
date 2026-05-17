@@ -111,3 +111,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1778988388151,advance,girlfriend,10000,その他,"パスポート",2026-05-17,,boyfriend
 1778989536432,expense,boyfriend,1260,娯楽費,"アライン",2026-05-17,,
 1779000831596,expense,boyfriend,298,食費,"おにぎり",2026-05-17,,
+1779000856913,expense,boyfriend,3413,娯楽費,"本",2026-05-17,,
