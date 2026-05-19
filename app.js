@@ -474,11 +474,11 @@ function renderSettle() {
   const jointToGf = txs.filter(t=>t.type==='transfer'&&t.payer==='joint'&&t.transferTo==='girlfriend').reduce((s,t)=>s+t.amount,0);
   const jointToBf = txs.filter(t=>t.type==='transfer'&&t.payer==='joint'&&t.transferTo==='boyfriend' ).reduce((s,t)=>s+t.amount,0);
 
-  // 立替額
+  // 個人取引（立替 + 人→人振替）
   const gfAdvForBf = txs.filter(t => t.type === 'advance' && t.payer === 'girlfriend' && t.beneficiary === 'boyfriend').reduce((s,t) => s+t.amount, 0);
   const bfAdvForGf = txs.filter(t => t.type === 'advance' && t.payer === 'boyfriend'  && t.beneficiary === 'girlfriend').reduce((s,t) => s+t.amount, 0);
-  const netGfAdv = gfAdvForBf - bfAdvForGf;
-  const netBfAdv = bfAdvForGf - gfAdvForBf;
+  const netGfAdv = gfAdvForBf - bfAdvForGf + gfToBf - bfToGf;
+  const netBfAdv = bfAdvForGf - gfAdvForBf + bfToGf - gfToBf;
 
   // 共用財布が個人費用を立替えた額（個人支出）
   const jointPersonalForGf = txs.filter(t => t.payer === 'joint' && t.beneficiary === 'girlfriend' && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
@@ -499,65 +499,58 @@ function renderSettle() {
   const gfShouldPay = sharedTotal * (Number(r.gfRatio)||1) / rt;
   const bfShouldPay = sharedTotal * (Number(r.bfRatio)||1) / rt;
 
-  // 合計 = 支出 - 返金 - 本来負担 + 立替 - 個人支出
-  const gfDiff = gfExpTotal - jointToGf - gfShouldPay + netGfAdv - jointPersonalForGf;
-  const bfDiff = bfExpTotal - jointToBf - bfShouldPay + netBfAdv - jointPersonalForBf;
+  // 合計 = 入金済 - 本来負担 + 個人取引
+  const gfDiff = gfDepBaseVal - gfShouldPay + netGfAdv;
+  const bfDiff = bfDepBaseVal - bfShouldPay + netBfAdv;
 
-  // 入金額: 入金済 + 立替（net）
-  const gfEffDep = gfDepBaseVal + netGfAdv;
-  const bfEffDep = bfDepBaseVal + netBfAdv;
-  const gfDepRatio  = Number(r.gfRatio) || 0;
-  const bfDepRatio  = Number(r.bfRatio) || 0;
-  let depMultiplier = 1;
-  while (
-    gfDepRatio > 0 && bfDepRatio > 0 &&
-    (gfEffDep > gfDepRatio * depMultiplier || bfEffDep > bfDepRatio * depMultiplier)
-  ) { depMultiplier++; }
-  const gfDepTarget = gfDepRatio * depMultiplier;
-  const bfDepTarget = bfDepRatio * depMultiplier;
-  const gfDepRemain = Math.max(0, gfDepTarget - gfEffDep);
-  const bfDepRemain = Math.max(0, bfDepTarget - bfEffDep);
+  // ビハインド計算
+  const gfDepRatio = Number(r.gfRatio) || 0;
+  const bfDepRatio = Number(r.bfRatio) || 0;
 
   // 割合ラベル
   const ratioLabel = `（${settings.gfName} ${r.gfRatio} : ${settings.bfName} ${r.bfRatio}）`;
 
-  // 詳細: 支出 / 返金 / 立替
+  // 詳細: 支出 / 返金 / 個人取引 / 個人支出
   const fmtAdv = v => v >= 0 ? fmt(v) : `-${fmt(-v)}`;
   const gfDetailParts = [];
   if (gfExpTotal > 0)          gfDetailParts.push(`支出 ${fmt(gfExpTotal)}`);
   if (jointToGf > 0)           gfDetailParts.push(`返金 -${fmt(jointToGf)}`);
-  if (netGfAdv !== 0)          gfDetailParts.push(`立替 ${fmtAdv(netGfAdv)}`);
+  if (netGfAdv !== 0)          gfDetailParts.push(`個人取引 ${fmtAdv(netGfAdv)}`);
   if (jointPersonalForGf > 0)  gfDetailParts.push(`個人支出 -${fmt(jointPersonalForGf)}`);
 
   const bfDetailParts = [];
   if (bfExpTotal > 0)          bfDetailParts.push(`支出 ${fmt(bfExpTotal)}`);
   if (jointToBf > 0)           bfDetailParts.push(`返金 -${fmt(jointToBf)}`);
-  if (netBfAdv !== 0)          bfDetailParts.push(`立替 ${fmtAdv(netBfAdv)}`);
+  if (netBfAdv !== 0)          bfDetailParts.push(`個人取引 ${fmtAdv(netBfAdv)}`);
   if (jointPersonalForBf > 0)  bfDetailParts.push(`個人支出 -${fmt(jointPersonalForBf)}`);
 
-  // 入金額表示: 入金済 ¥X + 立替 ¥Y ／ ¥Z → あと ¥W
-  const fmtDepLine = (base, adv, target, remain) => {
-    const advStr = adv !== 0 ? ` + 立替 ${fmtAdv(adv)}` : '';
-    const remStr = remain > 0
-      ? `→ <b>あと ${fmt(remain)}</b>`
-      : `→ <b class="deposit-done">達成 ✓</b>`;
-    return `入金済 ${fmtS(base)}${advStr} ／ ${fmt(target)} ${remStr}`;
-  };
+  // ビハインド表示
+  let depCardHtml = '';
+  if (gfDepRatio > 0 && bfDepRatio > 0) {
+    const gfUnit = gfDepBaseVal / gfDepRatio + netGfAdv;
+    const bfUnit = bfDepBaseVal / bfDepRatio + netBfAdv;
+    const diff = gfUnit - bfUnit;
+    let behindStr;
+    if (Math.abs(diff) < 0.01) {
+      behindStr = `<b class="deposit-done">2人同ペース ✓</b>`;
+    } else if (diff < 0) {
+      behindStr = `${settings.gfName}が ${fmt(Math.round(-diff * gfDepRatio))} ビハインド`;
+    } else {
+      behindStr = `${settings.bfName}が ${fmt(Math.round(diff * bfDepRatio))} ビハインド`;
+    }
+    depCardHtml = `
+    <div class="breakdown-item deposit-target-item">
+      <div class="bd-info">
+        <div class="bd-name">💳 入金額</div>
+        <div class="bd-detail" style="margin-top:4px">${behindStr}</div>
+      </div>
+    </div>`;
+  }
 
   // 内訳描画
   const bdEl = document.getElementById('breakdown-list');
   bdEl.innerHTML = `
-    <div class="breakdown-item deposit-target-item">
-      <div class="bd-info">
-        <div class="bd-name">💳 入金額</div>
-        <div class="bd-detail" style="margin-top:4px">
-          ${settings.gfName}：${fmtDepLine(gfDepBaseVal, netGfAdv, gfDepTarget, gfDepRemain)}
-        </div>
-        <div class="bd-detail" style="margin-top:4px">
-          ${settings.bfName}：${fmtDepLine(bfDepBaseVal, netBfAdv, bfDepTarget, bfDepRemain)}
-        </div>
-      </div>
-    </div>
+    ${depCardHtml}
     <div class="breakdown-item ratio-info-item">
       <div class="bd-avatar">⚖️</div>
       <div class="bd-info">
@@ -691,8 +684,10 @@ function renderSettle() {
 
   const allGfAdvForBf = allTx.filter(t => t.type === 'advance' && t.payer === 'girlfriend' && t.beneficiary === 'boyfriend').reduce((s,t) => s+t.amount, 0);
   const allBfAdvForGf = allTx.filter(t => t.type === 'advance' && t.payer === 'boyfriend'  && t.beneficiary === 'girlfriend').reduce((s,t) => s+t.amount, 0);
-  const allNetGfAdv   = allGfAdvForBf - allBfAdvForGf;
-  const allNetBfAdv   = allBfAdvForGf - allGfAdvForBf;
+  const allGfToBf = allTx.filter(t => t.type === 'transfer' && t.payer === 'girlfriend' && t.transferTo === 'boyfriend').reduce((s,t) => s+t.amount, 0);
+  const allBfToGf = allTx.filter(t => t.type === 'transfer' && t.payer === 'boyfriend'  && t.transferTo === 'girlfriend').reduce((s,t) => s+t.amount, 0);
+  const allNetGfAdv   = allGfAdvForBf - allBfAdvForGf + allGfToBf - allBfToGf;
+  const allNetBfAdv   = allBfAdvForGf - allGfAdvForBf + allBfToGf - allGfToBf;
 
   const allJointPersonalForGf = allTx.filter(t => t.payer === 'joint' && t.beneficiary === 'girlfriend' && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
   const allJointPersonalForBf = allTx.filter(t => t.payer === 'joint' && t.beneficiary === 'boyfriend'  && (t.type === 'expense' || t.type === 'advance')).reduce((s,t) => s+t.amount, 0);
@@ -711,60 +706,45 @@ function renderSettle() {
   const allGfShouldPay  = allSharedTotal * (Number(allR.gfRatio)||1) / allRt;
   const allBfShouldPay  = allSharedTotal * (Number(allR.bfRatio)||1) / allRt;
 
-  // 合計 = 支出 - 返金 - 本来負担 + 立替 - 個人支出
-  const allGfDiff = allGfExpTotal - allJointToGf - allGfShouldPay + allNetGfAdv - allJointPersonalForGf;
-  const allBfDiff = allBfExpTotal - allJointToBf - allBfShouldPay + allNetBfAdv - allJointPersonalForBf;
+  // 合計 = 入金済 - 本来負担 + 個人取引
+  const allGfDiff = allGfDepBaseVal - allGfShouldPay + allNetGfAdv;
+  const allBfDiff = allBfDepBaseVal - allBfShouldPay + allNetBfAdv;
 
   const allGfEffDep = allGfDepBaseVal + allNetGfAdv;
   const allBfEffDep = allBfDepBaseVal + allNetBfAdv;
 
-  // 詳細: 支出 / 返金 / 立替
+  // 詳細: 支出 / 返金 / 個人取引
   const fmtAdvA = v => v >= 0 ? fmt(v) : `-${fmt(-v)}`;
   const allGfDetailParts = [];
   if (allGfExpTotal > 0) allGfDetailParts.push(`支出 ${fmt(allGfExpTotal)}`);
   if (allJointToGf > 0)  allGfDetailParts.push(`返金 -${fmt(allJointToGf)}`);
-  if (allNetGfAdv !== 0) allGfDetailParts.push(`立替 ${fmtAdvA(allNetGfAdv)}`);
+  if (allNetGfAdv !== 0) allGfDetailParts.push(`個人取引 ${fmtAdvA(allNetGfAdv)}`);
   const allBfDetailParts = [];
   if (allBfExpTotal > 0) allBfDetailParts.push(`支出 ${fmt(allBfExpTotal)}`);
   if (allJointToBf > 0)  allBfDetailParts.push(`返金 -${fmt(allJointToBf)}`);
-  if (allNetBfAdv !== 0) allBfDetailParts.push(`立替 ${fmtAdvA(allNetBfAdv)}`);
+  if (allNetBfAdv !== 0) allBfDetailParts.push(`個人取引 ${fmtAdvA(allNetBfAdv)}`);
 
-  // ── 全期間の入金額カード ──
-  const allGfDepBase = Number(allR.gfRatio) || 0;
-  const allBfDepBase = Number(allR.bfRatio) || 0;
+  // ── 全期間の入金額カード（ビハインド表示）──
+  const allGfDepRatio = Number(allR.gfRatio) || 0;
+  const allBfDepRatio = Number(allR.bfRatio) || 0;
   let allDepCard = '';
-  if (allGfDepBase > 0 && allBfDepBase > 0) {
-    // 完了済みサイクルを除いた現サイクルの入金額（2人で同じサイクルに揃える）
-    const completedCycles = Math.min(
-      Math.floor(allGfEffDep / allGfDepBase),
-      Math.floor(allBfEffDep / allBfDepBase)
-    );
-    const allGfCycleAmt  = allGfEffDep - completedCycles * allGfDepBase;
-    const allBfCycleAmt  = allBfEffDep - completedCycles * allBfDepBase;
-    const allGfDepRemain = Math.max(0, allGfDepBase - allGfCycleAmt);
-    const allBfDepRemain = Math.max(0, allBfDepBase - allBfCycleAmt);
-    const fmtDepLineA = (cycleAmt, target, remain) => {
-      let remStr;
-      if (remain <= 0) {
-        const extra = cycleAmt - target;
-        remStr = extra > 0
-          ? `→ <b class="deposit-done">達成 ✓ (+${fmt(extra)})</b>`
-          : `→ <b class="deposit-done">達成 ✓</b>`;
-      } else {
-        remStr = `→ <b>あと ${fmt(remain)}</b>`;
-      }
-      return `入金済 ${fmtS(cycleAmt)} ／ ${fmt(target)} ${remStr}`;
-    };
+  if (allGfDepRatio > 0 && allBfDepRatio > 0) {
+    const allGfUnit = allGfDepBaseVal / allGfDepRatio + allNetGfAdv;
+    const allBfUnit = allBfDepBaseVal / allBfDepRatio + allNetBfAdv;
+    const allDiff = allGfUnit - allBfUnit;
+    let allBehindStr;
+    if (Math.abs(allDiff) < 0.01) {
+      allBehindStr = `<b class="deposit-done">2人同ペース ✓</b>`;
+    } else if (allDiff < 0) {
+      allBehindStr = `${settings.gfName}が ${fmt(Math.round(-allDiff * allGfDepRatio))} ビハインド`;
+    } else {
+      allBehindStr = `${settings.bfName}が ${fmt(Math.round(allDiff * allBfDepRatio))} ビハインド`;
+    }
     allDepCard = `
     <div class="breakdown-item deposit-target-item">
       <div class="bd-info">
         <div class="bd-name">💳 入金額</div>
-        <div class="bd-detail" style="margin-top:4px">
-          ${settings.gfName}：${fmtDepLineA(allGfCycleAmt, allGfDepBase, allGfDepRemain)}
-        </div>
-        <div class="bd-detail" style="margin-top:4px">
-          ${settings.bfName}：${fmtDepLineA(allBfCycleAmt, allBfDepBase, allBfDepRemain)}
-        </div>
+        <div class="bd-detail" style="margin-top:4px">${allBehindStr}</div>
       </div>
     </div>`;
   }
