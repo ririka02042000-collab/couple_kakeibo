@@ -107,10 +107,9 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1778912707915,expense,girlfriend,542,食費,"マルアイ",2026-05-16,,
 1778981577192,expense,girlfriend,1130,食費,"マクド",2026-05-16,,
 1778983796471,expense,girlfriend,1920,食費,"モーニング",2026-05-17,,
-1778988388151,advance,girlfriend,10000,その他,"パスポート",2026-05-17,,boyfriend
+1778988388151,transfer,girlfriend,10000,振替,"パスポート",2026-05-17,boyfriend,
 1778989536432,expense,boyfriend,1260,娯楽費,"アライン",2026-05-17,,
 1779000831596,expense,boyfriend,298,食費,"おにぎり",2026-05-17,,
 1779000856913,expense,boyfriend,3413,娯楽費,"本",2026-05-17,,
 1779001129073,expense,boyfriend,1100,交通費,"駐車場",2026-05-17,,
 1779007696904,expense,boyfriend,2510,食費,"マルハチ",2026-05-17,,
-1779187984066,transfer,joint,150,振替,"",2026-05-19,girlfriend,
