@@ -527,8 +527,8 @@ function renderSettle() {
   // ビハインド表示
   let depCardHtml = '';
   if (gfDepRatio > 0 && bfDepRatio > 0) {
-    const gfUnit = gfDepBaseVal / gfDepRatio + netGfAdv;
-    const bfUnit = bfDepBaseVal / bfDepRatio + netBfAdv;
+    const gfUnit = (gfDepBaseVal + netGfAdv) / gfDepRatio;
+    const bfUnit = (bfDepBaseVal + netBfAdv) / bfDepRatio;
     const diff = gfUnit - bfUnit;
     let behindStr;
     if (Math.abs(diff) < 0.01) {
@@ -729,8 +729,8 @@ function renderSettle() {
   const allBfDepRatio = Number(allR.bfRatio) || 0;
   let allDepCard = '';
   if (allGfDepRatio > 0 && allBfDepRatio > 0) {
-    const allGfUnit = allGfDepBaseVal / allGfDepRatio + allNetGfAdv;
-    const allBfUnit = allBfDepBaseVal / allBfDepRatio + allNetBfAdv;
+    const allGfUnit = (allGfDepBaseVal + allNetGfAdv) / allGfDepRatio;
+    const allBfUnit = (allBfDepBaseVal + allNetBfAdv) / allBfDepRatio;
     const allDiff = allGfUnit - allBfUnit;
     let allBehindStr;
     if (Math.abs(allDiff) < 0.01) {
