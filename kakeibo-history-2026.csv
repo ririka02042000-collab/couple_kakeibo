@@ -114,3 +114,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1779001129073,expense,boyfriend,1100,交通費,"駐車場",2026-05-17,,
 1779007696904,expense,boyfriend,2510,食費,"マルハチ",2026-05-17,,
 1779269157756,expense,girlfriend,341,食費,"マルハチ",2026-05-20,,
+1779274607086,advance,boyfriend,6600,住居費,"駐車場",2026-05-20,,girlfriend
