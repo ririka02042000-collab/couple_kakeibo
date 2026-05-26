@@ -116,3 +116,4 @@ id,type,payer,amount,category,note,date,transferTo,beneficiary
 1779007696904,expense,boyfriend,2510,食費,"マルハチ",2026-05-17,,
 1779269157756,expense,girlfriend,341,食費,"マルハチ",2026-05-20,,
 1779274607086,advance,boyfriend,6600,住居費,"駐車場",2026-05-20,,girlfriend
+1779799828733,expense,boyfriend,7780,食費,"米鶏食堂(記念日)",2026-05-26,,
