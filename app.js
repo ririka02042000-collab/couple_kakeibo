@@ -18,7 +18,7 @@ const TYPE_LABELS = {
 };
 
 // ── 状態 ──────────────────────────────────────────
-let transactions = JSON.parse(localStorage.getItem('couple_kakeibo') || '[]');
+let transactions = JSON.parse(localStorage.getItem('couple_kakeibo') || '[]').map(t => ({ ...t, date: String(t.date || '').slice(0, 10) }));
 let settings = JSON.parse(localStorage.getItem('couple_settings') || '{"gfName":"彼女","bfName":"彼氏","ratioHistory":[{"from":"1970-01-01","gfRatio":10000,"bfRatio":12000}]}');
 // 旧フォーマットからの移行
 if (!settings.ratioHistory) {
@@ -39,11 +39,6 @@ let gasSetLastMod   = 0;              // 設定の最終書き込みタイムス
 let gasSyncTimers   = {};             // { year: timerID }
 let gasSyncing      = false;          // syncFromGas 実行中フラグ（多重起動防止）
 let gasWriteQueues  = {};             // { year: Promise } 年ごとの書き込みキュー（並行書き込み防止）
-// 削除済みID集合：同期時にリモートから復活させないために記録
-let deletedIds = new Set(JSON.parse(localStorage.getItem('kakeibo_deleted') || '[]'));
-function saveDeletedIds() {
-  localStorage.setItem('kakeibo_deleted', JSON.stringify([...deletedIds]));
-}
 
 let currentType        = 'expense';
 let currentPayer       = 'joint';
@@ -71,7 +66,7 @@ const sign = (type, n) => {
   return '-' + fmt(n);
 };
 const fmtDate = d => {
-  const dt = new Date(d + 'T00:00:00');
+  const dt = new Date(String(d).slice(0, 10) + 'T00:00:00');
   return `${dt.getMonth()+1}/${dt.getDate()}`;
 };
 const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -367,7 +362,7 @@ function renderTxList(containerId, list, showDelete) {
 
   // 日付降順で表示
   Object.keys(groups).sort((a,b) => b.localeCompare(a)).forEach(date => {
-    const dt = new Date(date + 'T00:00:00');
+    const dt = new Date(String(date).slice(0, 10) + 'T00:00:00');
     const dateLabel = `${dt.getMonth()+1}月${dt.getDate()}日`;
 
     const header = document.createElement('div');
@@ -1107,10 +1102,11 @@ document.getElementById('history-tx-list').addEventListener('click', e => {
       transactionsByYear[delYear] = transactionsByYear[delYear].filter(t => t.id !== delId);
     }
     transactions = transactions.filter(t => t.id !== delId);
-    // 削除IDを記録（同期時にリモートから復活しないようにする）
-    deletedIds.add(String(delId));
-    saveDeletedIds();
     save(delYear);
+    if (gasConfig.url && delYear) {
+      gasPost('deleteRow', { year: delYear, id: String(delId) })
+        .catch(e => console.error('GAS deleteRow error:', e));
+    }
     renderAll();
   }
 });
@@ -1216,26 +1212,6 @@ function rebuildTransactions() {
   localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
 }
 
-// 削除済みIDを GAS と双方向同期する
-async function syncDeletedIdsGas() {
-  const data      = await gasGet('getDeleted');
-  const remoteIds = data.ids || [];
-  const localIds  = [...deletedIds].map(String);
-
-  let localChanged = false;
-  remoteIds.forEach(id => {
-    if (!deletedIds.has(id)) { deletedIds.add(id); localChanged = true; }
-  });
-  if (localChanged) saveDeletedIds();
-
-  const remoteSet  = new Set(remoteIds);
-  const needsWrite = localIds.some(id => !remoteSet.has(id));
-  if (needsWrite || remoteIds.length === 0) {
-    const merged = [...new Set([...remoteIds, ...localIds])];
-    await gasPost('saveDeleted', { ids: merged });
-  }
-}
-
 // GAS から年一覧を取得
 async function listGasYears() {
   const data = await gasGet('listYears');
@@ -1253,7 +1229,7 @@ function rowToTx(row) {
     amount,
     category: String(row.category || 'その他'),
     note:     String(row.note     || ''),
-    date:     String(row.date     || ''),
+    date:     String(row.date || '').slice(0, 10),
   };
   if (row.transferTo)  tx.transferTo  = String(row.transferTo);
   if (row.beneficiary) tx.beneficiary = String(row.beneficiary);
@@ -1270,19 +1246,18 @@ async function loadYearFromGas(year, force = false) {
   const remoteTxs  = (data.rows || []).map(rowToTx).filter(Boolean);
   gasLastModified[year] = data.lastModified || 0;
 
-  const filteredRemote = remoteTxs.filter(t => !deletedIds.has(String(t.id)));
-  const localTxs       = transactionsByYear[year] || [];
+  const localTxs = transactionsByYear[year] || [];
 
   let hasLocalOnly = false;
-  if (localTxs.length > 0 && filteredRemote.length > 0) {
+  if (localTxs.length > 0 && remoteTxs.length > 0) {
     const merged = {};
-    filteredRemote.forEach(t => { merged[t.id] = t; });
+    remoteTxs.forEach(t => { merged[t.id] = t; });
     localTxs.forEach(t => { merged[t.id] = t; });
     transactionsByYear[year] = Object.values(merged);
-    const remoteIds = new Set(filteredRemote.map(t => String(t.id)));
+    const remoteIds = new Set(remoteTxs.map(t => String(t.id)));
     hasLocalOnly = localTxs.some(t => !remoteIds.has(String(t.id)));
-  } else if (filteredRemote.length > 0) {
-    transactionsByYear[year] = filteredRemote;
+  } else if (remoteTxs.length > 0) {
+    transactionsByYear[year] = remoteTxs;
   } else {
     transactionsByYear[year] = localTxs;
   }
@@ -1322,36 +1297,22 @@ async function ensureAllYearsLoaded() {
   }
 }
 
-// 設定CSVビルド・パース
-function buildSettingsCsv() {
-  const lines = [
-    'gfName,' + settings.gfName,
-    'bfName,' + settings.bfName,
-    'ratioFrom,gfRatio,bfRatio',
-  ];
-  [...settings.ratioHistory]
-    .sort((a,b) => a.from.localeCompare(b.from))
-    .forEach(r => lines.push(`${r.from},${r.gfRatio},${r.bfRatio}`));
-  return lines.join('\n');
+// 設定をオブジェクトとして構築・適用
+function buildSettingsObj() {
+  return {
+    gfName:       settings.gfName,
+    bfName:       settings.bfName,
+    ratioHistory: [...settings.ratioHistory].sort((a, b) => a.from.localeCompare(b.from)),
+  };
 }
 
-function applySettingsFromCsv(text) {
-  text = text.replace(/^\ufeff/, '');
-  const lines = text.trim().split(/\r?\n/);
-  let ratioHeader = false;
-  const ratios = [];
-  lines.forEach(line => {
-    const parts = line.split(',');
-    if      (parts[0] === 'gfName')    settings.gfName = parts[1] || settings.gfName;
-    else if (parts[0] === 'bfName')    settings.bfName = parts[1] || settings.bfName;
-    else if (parts[0] === 'ratioFrom') ratioHeader = true;
-    else if (ratioHeader && parts.length >= 3) {
-      const gfR = parseFloat(parts[1]), bfR = parseFloat(parts[2]);
-      if (parts[0] && !isNaN(gfR) && !isNaN(bfR))
-        ratios.push({ from: parts[0], gfRatio: gfR, bfRatio: bfR });
-    }
-  });
-  if (ratios.length) settings.ratioHistory = ratios;
+function applySettingsFromObj(obj) {
+  if (!obj) return;
+  if (obj.gfName) settings.gfName = obj.gfName;
+  if (obj.bfName) settings.bfName = obj.bfName;
+  if (Array.isArray(obj.ratioHistory) && obj.ratioHistory.length > 0) {
+    settings.ratioHistory = obj.ratioHistory;
+  }
   localStorage.setItem('couple_settings', JSON.stringify(settings));
   applyNames();
 }
@@ -1402,13 +1363,10 @@ async function syncFromGas() {
       await writeYearToGas(currentYear);
     }
 
-    // 削除済みIDを同期
-    await syncDeletedIdsGas();
-
     // 設定を読み込み（ペンディング中の書き込みがない場合のみ適用）
     const setData = await gasGet('getSettings');
-    if (setData.content && gasSetSyncTimer === null) {
-      applySettingsFromCsv(setData.content);
+    if (setData.settings && gasSetSyncTimer === null) {
+      applySettingsFromObj(setData.settings);
     }
 
     updateGhStatus('ok');
@@ -1456,16 +1414,15 @@ async function writeYearToGas(year) {
         const data = await gasGet('getData', { year });
         const remoteTxs = (data.rows || []).map(rowToTx).filter(Boolean);
         gasLastModified[year] = data.lastModified || 0;
-        const filteredRemote = remoteTxs.filter(t => !deletedIds.has(String(t.id)));
         const localTxs = transactionsByYear[year] || [];
         const merged = {};
-        filteredRemote.forEach(t => { merged[t.id] = t; });
+        remoteTxs.forEach(t => { merged[t.id] = t; });
         localTxs.forEach(t => { merged[t.id] = t; });
         transactionsByYear[year] = Object.values(merged);
         rebuildTransactions();
       }
 
-      const yearTxs = transactionsByYear[year] || [];
+      const yearTxs = (transactionsByYear[year] || []).slice().sort((a, b) => a.id - b.id).map(t => ({ ...t, date: String(t.date || '').slice(0, 10) }));
       const result  = await gasPost('saveData', {
         year,
         rows:         yearTxs,
@@ -1490,7 +1447,7 @@ async function writeYearToGas(year) {
 
 // 設定を GAS へ書き込む
 async function writeSettingsToGas() {
-  await gasPost('saveSettings', { content: buildSettingsCsv() });
+  await gasPost('saveSettings', buildSettingsObj());
 }
 
 // 設定のみ GAS へ書き込む（デバウンス付き）

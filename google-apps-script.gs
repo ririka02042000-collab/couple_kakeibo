@@ -1,5 +1,5 @@
 // ============================================================
-//  RT経費精算 — Google Apps Script バックエンド v2
+//  RT経費精算 — Google Apps Script バックエンド v3
 //  スプレッドシートID: 1r7LYfEaxanCcEPIMYzxnaGIu7iT4dJeXXKd1XnYmkUo
 //
 //  【デプロイ手順】
@@ -12,19 +12,17 @@
 //  【GET エンドポイント】
 //  ?action=listYears              → 年シート名一覧
 //  ?action=getData&year=2026      → 指定年の全取引
-//  ?action=getSettings            → 設定CSV文字列
-//  ?action=getDeleted             → 削除済みID一覧
+//  ?action=getSettings            → 設定オブジェクト { gfName, bfName, ratioHistory }
 //
 //  【POST エンドポイント（ボディはJSON文字列）】
 //  { action:"saveData",     year, rows, lastModified } → 指定年データ全上書き
-//  { action:"saveSettings", content }                  → 設定CSV保存
-//  { action:"saveDeleted",  ids }                      → 削除済みID保存
+//  { action:"deleteRow",    year, id }                 → 指定IDの行を直接削除
+//  { action:"saveSettings", gfName, bfName, ratioHistory } → 設定保存（キー・値形式）
 // ============================================================
 
 const SPREADSHEET_ID  = '1r7LYfEaxanCcEPIMYzxnaGIu7iT4dJeXXKd1XnYmkUo';
 const TX_HEADERS      = ['id', 'type', 'payer', 'amount', 'category', 'note', 'date', 'transferTo', 'beneficiary'];
 const SETTINGS_SHEET  = 'settings';
-const DELETED_SHEET   = 'deleted';
 
 const lastWriteKey = year => `lastWrite_${year}`;
 
@@ -38,7 +36,6 @@ function doGet(e) {
       case 'listYears':   return handleListYears();
       case 'getData':     return handleGetData(e.parameter.year);
       case 'getSettings': return handleGetSettings();
-      case 'getDeleted':  return handleGetDeleted();
       default:            return jsonError('不明なアクション: ' + action);
     }
   } catch (err) {
@@ -61,8 +58,8 @@ function doPost(e) {
 
     switch (body.action) {
       case 'saveData':     return handleSaveData(body);
+      case 'deleteRow':    return handleDeleteRow(body);
       case 'saveSettings': return handleSaveSettings(body);
-      case 'saveDeleted':  return handleSaveDeleted(body);
       default:             return jsonError('不明なアクション: ' + body.action);
     }
   } catch (err) {
@@ -82,7 +79,7 @@ function handleListYears() {
   const years = ss.getSheets()
     .map(s => s.getName())
     .filter(n => /^\d{4}$/.test(n))
-    .sort((a, b) => b.localeCompare(a)); // 新しい年が先
+    .sort((a, b) => b.localeCompare(a));
   return jsonOk({ years });
 }
 
@@ -96,23 +93,26 @@ function handleGetData(year) {
   return jsonOk({ rows, lastModified });
 }
 
-// 設定CSV文字列を返す
+// 設定をキー・値オブジェクトとして返す
+// シート構造: A列=キー名、B列=値（ratioHistory は JSON 文字列）
 function handleGetSettings() {
   const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(SETTINGS_SHEET);
-  if (!sheet || sheet.getLastRow() === 0) return jsonOk({ content: null });
-  const content = sheet.getRange(1, 1).getValue();
-  return jsonOk({ content: content || null });
-}
+  if (!sheet || sheet.getLastRow() === 0) return jsonOk({ settings: null });
 
-// 削除済みIDリストを返す
-function handleGetDeleted() {
-  const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(DELETED_SHEET);
-  if (!sheet || sheet.getLastRow() === 0) return jsonOk({ ids: [] });
-  const values = sheet.getRange(1, 1, sheet.getLastRow(), 1).getValues();
-  const ids    = values.map(r => String(r[0])).filter(Boolean);
-  return jsonOk({ ids });
+  const values = sheet.getRange(1, 1, sheet.getLastRow(), 2).getValues();
+  const obj    = {};
+  values.forEach(([key, val]) => {
+    if (!key) return;
+    const k = String(key);
+    const v = String(val);
+    if (k === 'ratioHistory') {
+      try { obj[k] = JSON.parse(v); } catch(_) { obj[k] = []; }
+    } else {
+      obj[k] = v;
+    }
+  });
+  return jsonOk({ settings: obj });
 }
 
 // ============================================================
@@ -124,7 +124,6 @@ function handleSaveData(body) {
   const { year, rows, lastModified } = body;
   if (!year) return jsonError('year が必要です');
 
-  // 競合チェック：クライアントの lastModified より新しい書き込みが直近10秒以内にある場合
   const props           = PropertiesService.getScriptProperties();
   const serverLastWrite = parseInt(props.getProperty(lastWriteKey(year)) || '0', 10);
   const now             = Date.now();
@@ -135,9 +134,7 @@ function handleSaveData(body) {
     return jsonConflict(serverLastWrite);
   }
 
-  const sheet = getOrCreateYearSheet(year);
-
-  // ヘッダー行(1行目)を残して全データ行を削除し、新しいデータを書き込む
+  const sheet   = getOrCreateYearSheet(year);
   const lastRow = sheet.getLastRow();
   if (lastRow > 1) sheet.deleteRows(2, lastRow - 1);
 
@@ -148,17 +145,44 @@ function handleSaveData(body) {
         return (v !== undefined && v !== null) ? v : '';
       })
     );
-    sheet.getRange(2, 1, values.length, TX_HEADERS.length).setValues(values);
+    const dataRange = sheet.getRange(2, 1, values.length, TX_HEADERS.length);
+    // date列（7列目）をテキスト形式に固定してから書き込む（Sheetsの日付自動変換を防ぐ）
+    const dateColIndex = TX_HEADERS.indexOf('date') + 1;
+    sheet.getRange(2, dateColIndex, values.length, 1).setNumberFormat('@');
+    dataRange.setValues(values);
   }
 
   props.setProperty(lastWriteKey(year), String(now));
   return jsonOk({ success: true, lastModified: now });
 }
 
-// 設定CSVを保存
+// 指定IDの行を年シートから直接削除する
+function handleDeleteRow(body) {
+  const { year, id } = body;
+  if (!year || id === undefined) return jsonError('year と id が必要です');
+
+  const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(String(year));
+  if (!sheet) return jsonOk({ success: true }); // シートがなければ削除済み扱い
+
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][0]) === String(id)) {
+      sheet.deleteRow(i + 1); // シートの行番号は1始まり
+      return jsonOk({ success: true });
+    }
+  }
+  return jsonOk({ success: true }); // 見つからない = 削除済み
+}
+
+// 設定をキー・値形式でシートに保存する
+// 受け取るフィールド: gfName, bfName, ratioHistory (配列)
 function handleSaveSettings(body) {
-  const { content } = body;
-  if (content === undefined) return jsonError('content が必要です');
+  const { gfName, bfName, ratioHistory } = body;
+  if (gfName === undefined && bfName === undefined && ratioHistory === undefined) {
+    return jsonError('設定フィールドが必要です');
+  }
+
   const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
   let   sheet = ss.getSheetByName(SETTINGS_SHEET);
   if (!sheet) {
@@ -166,24 +190,14 @@ function handleSaveSettings(body) {
   } else {
     sheet.clearContents();
   }
-  sheet.getRange(1, 1).setValue(content);
-  return jsonOk({ success: true });
-}
 
-// 削除済みIDリストを保存
-function handleSaveDeleted(body) {
-  const { ids } = body;
-  if (!Array.isArray(ids)) return jsonError('ids が必要です');
-  const ss    = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let   sheet = ss.getSheetByName(DELETED_SHEET);
-  if (!sheet) {
-    sheet = ss.insertSheet(DELETED_SHEET);
-  } else {
-    sheet.clearContents();
-  }
-  if (ids.length > 0) {
-    const values = ids.map(id => [String(id)]);
-    sheet.getRange(1, 1, values.length, 1).setValues(values);
+  const rows = [];
+  if (gfName       !== undefined) rows.push(['gfName',       String(gfName)]);
+  if (bfName       !== undefined) rows.push(['bfName',       String(bfName)]);
+  if (ratioHistory !== undefined) rows.push(['ratioHistory', JSON.stringify(ratioHistory)]);
+
+  if (rows.length > 0) {
+    sheet.getRange(1, 1, rows.length, 2).setValues(rows);
   }
   return jsonOk({ success: true });
 }
@@ -211,7 +225,13 @@ function sheetToObjects(sheet) {
   const headers = data[0].map(String);
   return data.slice(1).map(row => {
     const obj = {};
-    headers.forEach((h, i) => { obj[h] = row[i]; });
+    headers.forEach((h, i) => {
+      const v = row[i];
+      // スプレッドシートが日付型に変換したセルを YYYY-MM-DD 文字列に戻す
+      obj[h] = v instanceof Date
+        ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+        : v;
+    });
     return obj;
   });
 }
