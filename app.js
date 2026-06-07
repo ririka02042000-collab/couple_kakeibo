@@ -32,13 +32,13 @@ transactions.forEach(tx => {
   if (!transactionsByYear[y]) transactionsByYear[y] = [];
   transactionsByYear[y].push(tx);
 });
-let loadedYears    = new Set();       // GitHub から取得済みの年
-let ghYearShas     = {};              // { '2026': 'sha...', ... }
-let availableYears = [];              // GitHub に存在する年一覧
-let ghSetSha       = null;
-let ghSyncTimers   = {};              // { year: timerID }
-let ghSyncing      = false;           // syncFromGitHub 実行中フラグ（多重起動防止）
-let ghWriteQueues  = {};              // { year: Promise } 年ごとの書き込みキュー（並行書き込み防止）
+let loadedYears     = new Set();      // GAS から取得済みの年
+let gasLastModified = {};             // { '2026': timestamp, ... } 年ごとの最終書き込みタイムスタンプ
+let availableYears  = [];             // GAS に存在する年一覧
+let gasSetLastMod   = 0;              // 設定の最終書き込みタイムスタンプ
+let gasSyncTimers   = {};             // { year: timerID }
+let gasSyncing      = false;          // syncFromGas 実行中フラグ（多重起動防止）
+let gasWriteQueues  = {};             // { year: Promise } 年ごとの書き込みキュー（並行書き込み防止）
 // 削除済みID集合：同期時にリモートから復活させないために記録
 let deletedIds = new Set(JSON.parse(localStorage.getItem('kakeibo_deleted') || '[]'));
 function saveDeletedIds() {
@@ -79,8 +79,8 @@ const escHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'
 const save = (affectedYear) => {
   localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
   localStorage.setItem('couple_settings', JSON.stringify(settings));
-  if (affectedYear) scheduleSyncYearToGitHub(affectedYear);
-  scheduleSyncSettingsToGitHub();
+  if (affectedYear) scheduleSyncYearToGas(affectedYear);
+  scheduleSyncSettingsToGas();
 };
 
 // ── 割合取得（日付に対応した割合を返す）────────────────
@@ -1129,19 +1129,13 @@ document.getElementById('settings-btn').addEventListener('click', () => {
   document.getElementById('setting-ratio-date').value = new Date().toISOString().slice(0,10);
   document.getElementById('setting-gf-ratio').value = '';
   document.getElementById('setting-bf-ratio').value = '';
-  // GitHub設定を表示（トークンはセキュリティのため非表示）
-  document.getElementById('gh-token').value  = ghConfig.token  ? '（設定済み）' : '';
-  document.getElementById('gh-repo').value   = ghConfig.repo   || '';
-  document.getElementById('gh-branch').value = ghConfig.branch || '';
+  // GAS URL を表示
+  document.getElementById('gas-url').value = gasConfig.url || '';
   renderRatioHistory();
   settingsOverlay.classList.add('active');
 });
 
-document.getElementById('gh-sync-now-btn').addEventListener('click', syncFromGitHub);
-// トークン入力欄フォーカス時に「（設定済み）」をクリア
-document.getElementById('gh-token').addEventListener('focus', function() {
-  if (this.value === '（設定済み）') this.value = '';
-});
+document.getElementById('gas-sync-now-btn').addEventListener('click', syncFromGas);
 
 document.getElementById('settings-cancel').addEventListener('click', () => {
   settingsOverlay.classList.remove('active');
@@ -1157,10 +1151,9 @@ document.getElementById('settings-save').addEventListener('click', () => {
 
   const gfR     = parseFloat(document.getElementById('setting-gf-ratio').value);
   const bfR     = parseFloat(document.getElementById('setting-bf-ratio').value);
-  const rawDate = document.getElementById('setting-ratio-date').value; // "YYYY-MM"
-  const date    = rawDate ? rawDate + '-01' : ''; // 月初(1日)に固定
+  const rawDate = document.getElementById('setting-ratio-date').value;
+  const date    = rawDate ? rawDate + '-01' : '';
 
-  // 割合と日付が両方入力されている場合のみ追加
   if (gfR > 0 && bfR > 0 && date) {
     settings.ratioHistory = settings.ratioHistory.filter(r => r.from !== date);
     settings.ratioHistory.push({ from: date, gfRatio: gfR, bfRatio: bfR });
@@ -1169,88 +1162,51 @@ document.getElementById('settings-save').addEventListener('click', () => {
     document.getElementById('setting-ratio-date').value = '';
   }
 
-  // GitHub 設定を保存（トークンは入力がある場合のみ更新。「設定済み」プレースホルダは除外）
-  const token  = document.getElementById('gh-token').value.trim();
-  const repo   = document.getElementById('gh-repo').value.trim();
-  const branch = document.getElementById('gh-branch').value.trim();
-  if (token && token !== '（設定済み）') ghConfig.token = token;
-  if (repo)   ghConfig.repo   = repo;
-  if (branch) ghConfig.branch = branch;
-  saveGhConfig();
+  // GAS URL を保存
+  const url = document.getElementById('gas-url').value.trim();
+  if (url) gasConfig.url = url;
+  saveGasConfig();
 
-  save(null); // 設定のみ（取引ファイルは変更なし）
+  save(null);
   applyNames();
   renderAll();
   settingsOverlay.classList.remove('active');
 
   // 設定保存後に自動で同期開始
-  if (ghConfig.token && ghConfig.repo) syncFromGitHub();
+  if (gasConfig.url) syncFromGas();
 });
 
-// ── GitHub API 連動（年別ファイル・遅延読み込み） ──
-let ghConfig = JSON.parse(localStorage.getItem('kakeibo_gh') || 'null') || {};
-// 過去バグで「（設定済み）」が保存されていた場合はリセット
-if (ghConfig.token === '（設定済み）') { ghConfig.token = ''; saveGhConfig(); }
+// ── GAS API 連動 ──────────────────────────────────────────
+let gasConfig = JSON.parse(localStorage.getItem('kakeibo_gas') || 'null') || {};
 
-const ghYearPath  = year => `kakeibo-history-${year}.csv`;
-const GH_SET_PATH = 'kakeibo-settings.csv';
-const GH_DEL_PATH = 'kakeibo-deleted.csv';
-
-function saveGhConfig() {
-  localStorage.setItem('kakeibo_gh', JSON.stringify(ghConfig));
+function saveGasConfig() {
+  localStorage.setItem('kakeibo_gas', JSON.stringify(gasConfig));
 }
 
-// UTF-8 ⇔ Base64（日本語対応）
-function toB64(str) {
-  const bytes = new TextEncoder().encode(str);
-  let bin = '';
-  bytes.forEach(b => bin += String.fromCharCode(b));
-  return btoa(bin);
-}
-function fromB64(b64) {
-  const bin   = atob(b64.replace(/\s/g, ''));
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder('utf-8').decode(bytes);
+// GAS エンドポイントへ GET リクエスト
+async function gasGet(action, params = {}) {
+  if (!gasConfig.url) throw new Error('GAS URL が未設定です');
+  const qs  = new URLSearchParams({ action, ...params }).toString();
+  const res = await fetch(`${gasConfig.url}?${qs}`);
+  if (!res.ok) throw new Error(`GAS GET error: ${res.status}`);
+  const data = await res.json();
+  if (data.error) throw new Error(`GAS: ${data.error}`);
+  return data;
 }
 
-// GitHub Contents API 共通処理
-async function ghAPI(path, opts = {}) {
-  const url = `https://api.github.com/repos/${ghConfig.repo}/contents/${path}`;
-  const res = await fetch(url, {
-    ...opts,
-    headers: {
-      'Authorization': `Bearer ${ghConfig.token}`,
-      'Accept': 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(opts.headers || {})
-    }
+// GAS エンドポイントへ POST リクエスト
+// Content-Type を省略し text/plain 扱いにすることで CORS プリフライトを回避
+async function gasPost(action, body = {}) {
+  if (!gasConfig.url) throw new Error('GAS URL が未設定です');
+  const res = await fetch(gasConfig.url, {
+    method:  'POST',
+    body:    JSON.stringify({ action, ...body }),
   });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
-  return res.json();
-}
-
-async function ghRead(path) {
-  const ref  = encodeURIComponent(ghConfig.branch || 'main');
-  const data = await ghAPI(`${path}?ref=${ref}`);
-  if (!data) return { content: null, sha: null };
-  return { content: fromB64(data.content), sha: data.sha };
-}
-
-async function ghWrite(path, content, sha) {
-  const body = {
-    message: `update ${path}`,
-    content: toB64(content),
-    branch:  ghConfig.branch || 'main',
-  };
-  if (sha) body.sha = sha;
-  const res = await ghAPI(path, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
-  return res?.content?.sha || sha;
+  if (!res.ok) throw new Error(`GAS POST error: ${res.status}`);
+  const data = await res.json();
+  if (data.error === 'conflict') return data; // 競合は呼び出し元で処理
+  if (data.error) throw new Error(`GAS: ${data.error}`);
+  return data;
 }
 
 // transactions を transactionsByYear から再構築
@@ -1260,72 +1216,73 @@ function rebuildTransactions() {
   localStorage.setItem('couple_kakeibo', JSON.stringify(transactions));
 }
 
-// 削除済みIDをGitHubと双方向同期する
-// ・リモートの削除IDをローカルに反映（相手の削除を受け取る）
-// ・ローカルにしかない削除IDをリモートに書き戻す（自分の削除を相手に伝える）
-async function syncDeletedIds() {
-  const { content, sha } = await ghRead(GH_DEL_PATH);
-  const remoteIds = content ? content.trim().split(/\r?\n/).filter(Boolean) : [];
+// 削除済みIDを GAS と双方向同期する
+async function syncDeletedIdsGas() {
+  const data      = await gasGet('getDeleted');
+  const remoteIds = data.ids || [];
   const localIds  = [...deletedIds].map(String);
 
-  // リモートの削除IDをローカルに追記
   let localChanged = false;
   remoteIds.forEach(id => {
     if (!deletedIds.has(id)) { deletedIds.add(id); localChanged = true; }
   });
   if (localChanged) saveDeletedIds();
 
-  // ローカルにしかない削除IDがあればリモートに書き込む
   const remoteSet  = new Set(remoteIds);
   const needsWrite = localIds.some(id => !remoteSet.has(id));
-  if (needsWrite || !content) {
-    const merged = [...new Set([...remoteIds, ...localIds])].join('\n');
-    await ghWrite(GH_DEL_PATH, merged, sha);
+  if (needsWrite || remoteIds.length === 0) {
+    const merged = [...new Set([...remoteIds, ...localIds])];
+    await gasPost('saveDeleted', { ids: merged });
   }
 }
 
-// GitHub ルートディレクトリを一覧して年別ファイルを検出
-async function listGhYearFiles() {
-  const ref   = encodeURIComponent(ghConfig.branch || 'main');
-  const files = await ghAPI(`?ref=${ref}`);
-  if (!Array.isArray(files)) return;
-  availableYears = [];
-  files.forEach(f => {
-    const m = f.name.match(/^kakeibo-history-(\d{4})\.csv$/);
-    if (m) {
-      availableYears.push(m[1]);
-      ghYearShas[m[1]] = f.sha;
-    }
-  });
-  availableYears.sort((a,b) => b.localeCompare(a)); // 新しい年が先
+// GAS から年一覧を取得
+async function listGasYears() {
+  const data = await gasGet('listYears');
+  availableYears = data.years || [];
 }
 
-// 1年分のデータを GitHub から読み込む（force=true で強制再読み込み）
-// 戻り値: ローカルにしかない取引があった場合は true（呼び出し元で書き戻しを行う）
-async function loadYearFromGitHub(year, force = false) {
+// GAS の行オブジェクトを取引オブジェクトに変換
+function rowToTx(row) {
+  const amount = parseInt(row.amount);
+  if (!amount || amount <= 0) return null;
+  const tx = {
+    id:       parseInt(row.id) || Date.now(),
+    type:     String(row.type     || 'expense'),
+    payer:    String(row.payer    || 'girlfriend'),
+    amount,
+    category: String(row.category || 'その他'),
+    note:     String(row.note     || ''),
+    date:     String(row.date     || ''),
+  };
+  if (row.transferTo)  tx.transferTo  = String(row.transferTo);
+  if (row.beneficiary) tx.beneficiary = String(row.beneficiary);
+  if (!tx.date) return null;
+  return tx;
+}
+
+// 1年分のデータを GAS から読み込む（force=true で強制再読み込み）
+// 戻り値: ローカルにしかない取引がある場合は true
+async function loadYearFromGas(year, force = false) {
   if (!force && loadedYears.has(year)) return false;
-  const { content, sha } = await ghRead(ghYearPath(year));
-  ghYearShas[year] = sha || ghYearShas[year];
 
-  const remoteTxs = content ? parseTransactionsCsv(content) : [];
-  const localTxs  = transactionsByYear[year] || [];
+  const data       = await gasGet('getData', { year });
+  const remoteTxs  = (data.rows || []).map(rowToTx).filter(Boolean);
+  gasLastModified[year] = data.lastModified || 0;
 
-  // 削除済みIDをリモートデータから除外（ローカルで削除したものを復活させない）
-  const filteredRemoteTxs = remoteTxs.filter(t => !deletedIds.has(String(t.id)));
+  const filteredRemote = remoteTxs.filter(t => !deletedIds.has(String(t.id)));
+  const localTxs       = transactionsByYear[year] || [];
 
   let hasLocalOnly = false;
-  if (localTxs.length > 0 && filteredRemoteTxs.length > 0) {
-    // マージ：リモートを下敷きにしてローカルで上書き（ローカル優先）
-    // → 編集がリモートの旧データで失われないようにするため
+  if (localTxs.length > 0 && filteredRemote.length > 0) {
     const merged = {};
-    filteredRemoteTxs.forEach(t => { merged[t.id] = t; }); // リモートを先に
-    localTxs.forEach(t => { merged[t.id] = t; });           // ローカルで上書き
+    filteredRemote.forEach(t => { merged[t.id] = t; });
+    localTxs.forEach(t => { merged[t.id] = t; });
     transactionsByYear[year] = Object.values(merged);
-    // ローカルにしかない取引があるか確認（書き戻しトリガー）
-    const remoteIds = new Set(filteredRemoteTxs.map(t => String(t.id)));
+    const remoteIds = new Set(filteredRemote.map(t => String(t.id)));
     hasLocalOnly = localTxs.some(t => !remoteIds.has(String(t.id)));
-  } else if (filteredRemoteTxs.length > 0) {
-    transactionsByYear[year] = filteredRemoteTxs;
+  } else if (filteredRemote.length > 0) {
+    transactionsByYear[year] = filteredRemote;
   } else {
     transactionsByYear[year] = localTxs;
   }
@@ -1337,14 +1294,14 @@ async function loadYearFromGitHub(year, force = false) {
 
 // 指定年が未ロードなら読み込む
 async function ensureYearLoaded(year) {
-  if (!ghConfig.token || !ghConfig.repo) return;
+  if (!gasConfig.url) return;
   if (!loadedYears.has(year)) {
     updateGhStatus('syncing');
     try {
-      await loadYearFromGitHub(year);
+      await loadYearFromGas(year);
       updateGhStatus('ok');
     } catch(e) {
-      console.error('GitHub load error:', e);
+      console.error('GAS load error:', e);
       updateGhStatus('error');
     }
   }
@@ -1352,15 +1309,15 @@ async function ensureYearLoaded(year) {
 
 // 全年分をロード（精算タブ用）
 async function ensureAllYearsLoaded() {
-  if (!ghConfig.token || !ghConfig.repo) return;
+  if (!gasConfig.url) return;
   const unloaded = availableYears.filter(y => !loadedYears.has(y));
   if (!unloaded.length) return;
   updateGhStatus('syncing');
   try {
-    await Promise.all(unloaded.map(y => loadYearFromGitHub(y)));
+    await Promise.all(unloaded.map(y => loadYearFromGas(y)));
     updateGhStatus('ok');
   } catch(e) {
-    console.error('GitHub load error:', e);
+    console.error('GAS load error:', e);
     updateGhStatus('error');
   }
 }
@@ -1426,187 +1383,127 @@ function updateGhStatus(state, detail) {
     }
   }
 
-  // トークン失効（401）の検出・解除
-  if (state === 'error' && detail === '401') {
-    localStorage.setItem('kakeibo_token_expired', '1');
-    showTokenExpiredAlert();
-  } else if (state === 'ok') {
-    localStorage.removeItem('kakeibo_token_expired');
-  }
 }
 
-// ── トークン失効アラート ────────────────────────────
-function showTokenExpiredAlert() {
-  // すでにこのセッションで表示済みなら何もしない
-  if (sessionStorage.getItem('token_alert_shown')) return;
-  const overlay = document.getElementById('token-expired-overlay');
-  if (overlay) overlay.classList.add('active');
-}
-
-function initTokenExpiredAlert() {
-  // ページ読み込み時：localStorage フラグが立っていたら表示
-  if (localStorage.getItem('kakeibo_token_expired') !== '1') return;
-  showTokenExpiredAlert();
-  const btn = document.getElementById('token-expired-ok');
-  if (btn) {
-    btn.addEventListener('click', () => {
-      sessionStorage.setItem('token_alert_shown', '1');
-      const overlay = document.getElementById('token-expired-overlay');
-      if (overlay) overlay.classList.remove('active');
-    });
-  }
-}
-
-// GitHub から読み込み（起動時：当年のみ、他は遅延）
-async function syncFromGitHub() {
-  // トークン・リポジトリが未設定または不正な場合はスキップ
-  const hasValidToken = ghConfig.token && ghConfig.token !== '（設定済み）';
-  if (!hasValidToken || !ghConfig.repo) { updateGhStatus('none'); return; }
-  // 多重実行防止
-  if (ghSyncing) return;
-  ghSyncing = true;
+// GAS から読み込み（起動時：当年のみ、他は遅延）
+async function syncFromGas() {
+  if (!gasConfig.url) { updateGhStatus('none'); return; }
+  if (gasSyncing) return;
+  gasSyncing = true;
   updateGhStatus('syncing');
   try {
-    // 年別ファイル一覧を取得
-    await listGhYearFiles();
+    // 年一覧を取得
+    await listGasYears();
 
-    // 当年データを強制再読み込み（キャッシュ無効）
-    // ローカルにしかない取引があれば、ここで書き戻す（同期完了前に直列処理）
-    const currentYear = new Date().getFullYear().toString();
-    const needsWriteBack = await loadYearFromGitHub(currentYear, true);
+    // 当年データを強制再読み込み
+    const currentYear    = new Date().getFullYear().toString();
+    const needsWriteBack = await loadYearFromGas(currentYear, true);
     if (needsWriteBack) {
-      await writeYearToGitHub(currentYear);
+      await writeYearToGas(currentYear);
     }
 
-    // 削除済みIDをGitHubと同期（相手の削除を受け取り、自分の削除を送る）
-    await syncDeletedIds();
+    // 削除済みIDを同期
+    await syncDeletedIdsGas();
 
-    // 設定データを読み込み
-    // ローカルに未送信の設定変更がある場合（タイマー発火待ち）はGitHub値で上書きしない
-    const { content: setContent, sha: setSha } = await ghRead(GH_SET_PATH);
-    if (setContent) {
-      ghSetSha = setSha;
-      if (ghSetSyncTimer === null) {
-        // ペンディング中の書き込みがない場合のみ適用（ローカル優先）
-        applySettingsFromCsv(setContent);
-      }
+    // 設定を読み込み（ペンディング中の書き込みがない場合のみ適用）
+    const setData = await gasGet('getSettings');
+    if (setData.content && gasSetSyncTimer === null) {
+      applySettingsFromCsv(setData.content);
     }
 
     updateGhStatus('ok');
     updateCsvYearSelect();
   } catch(e) {
-    // HTTPステータスを抽出して表示
-    const status = e.message?.match(/GitHub API (\d+)/)?.[1];
-    console.error('GitHub sync error:', e.message || e);
-    updateGhStatus('error', status);
+    console.error('GAS sync error:', e.message || e);
+    updateGhStatus('error');
   } finally {
-    ghSyncing = false;
+    gasSyncing = false;
   }
-  // 描画は同期の成否に関わらず実行（描画エラーを同期エラーと混同しない）
   renderAll();
 }
 
-// 指定年のファイルを GitHub へ書き込む（デバウンス付き・2秒後）
-// 409/422（SHA競合）の場合は最新データをマージしてリトライする
-function scheduleSyncYearToGitHub(year) {
-  if (!ghConfig.token || !ghConfig.repo || !year) return;
-  clearTimeout(ghSyncTimers[year]);
-  ghSyncTimers[year] = setTimeout(async () => {
-    // メインの同期中は少し待ってリトライ
-    if (ghSyncing) { scheduleSyncYearToGitHub(year); return; }
+// 指定年のデータを GAS へ書き込む（デバウンス付き・2秒後）
+function scheduleSyncYearToGas(year) {
+  if (!gasConfig.url || !year) return;
+  clearTimeout(gasSyncTimers[year]);
+  gasSyncTimers[year] = setTimeout(async () => {
+    if (gasSyncing) { scheduleSyncYearToGas(year); return; }
     updateGhStatus('syncing');
     try {
-      await writeYearToGitHub(year);
+      await writeYearToGas(year);
       updateGhStatus('ok');
     } catch(e) {
-      const status = e.message?.match(/GitHub API (\d+)/)?.[1];
-      console.error('GitHub write error:', e);
-      updateGhStatus('error', status);
+      console.error('GAS write error:', e);
+      updateGhStatus('error');
     }
   }, 2000);
 }
 
-// 年データを GitHub へ書き込む
-// ・同年の並行書き込みをキューで直列化（ghWriteQueues）
-// ・書き込み前に最新 SHA を取得（422回避）
-// ・409/422（SHA競合）時はリモートデータをマージしてリトライ（最大3回）
-async function writeYearToGitHub(year) {
-  // 同年への並行書き込みを防ぐ：前の書き込みが終わるまで待つ
-  const prev = ghWriteQueues[year] || Promise.resolve();
+// 年データを GAS へ書き込む
+// ・同年の並行書き込みをキューで直列化
+// ・競合時はリモートデータをマージしてリトライ（最大3回）
+async function writeYearToGas(year) {
+  const prev = gasWriteQueues[year] || Promise.resolve();
   let unlock;
-  ghWriteQueues[year] = new Promise(r => { unlock = r; });
+  gasWriteQueues[year] = new Promise(r => { unlock = r; });
   await prev;
 
   try {
     const MAX_RETRY = 3;
     for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
-      // 毎回最新 SHA とリモートの中身を取得
-      const { content: remoteContent, sha } = await ghRead(ghYearPath(year));
-      if (sha) ghYearShas[year] = sha;
-
-      // リトライ時（競合発生後）はリモートデータとマージして相手の変更を保持
-      if (attempt > 0 && remoteContent) {
-        const remoteTxs = parseTransactionsCsv(remoteContent);
+      // リトライ時はリモートデータを再取得してマージ
+      if (attempt > 0) {
+        const data = await gasGet('getData', { year });
+        const remoteTxs = (data.rows || []).map(rowToTx).filter(Boolean);
+        gasLastModified[year] = data.lastModified || 0;
         const filteredRemote = remoteTxs.filter(t => !deletedIds.has(String(t.id)));
         const localTxs = transactionsByYear[year] || [];
         const merged = {};
-        filteredRemote.forEach(t => { merged[t.id] = t; }); // リモートを下敷きに
-        localTxs.forEach(t => { merged[t.id] = t; });        // ローカルで上書き
+        filteredRemote.forEach(t => { merged[t.id] = t; });
+        localTxs.forEach(t => { merged[t.id] = t; });
         transactionsByYear[year] = Object.values(merged);
         rebuildTransactions();
       }
 
       const yearTxs = transactionsByYear[year] || [];
-      try {
-        ghYearShas[year] = await ghWrite(ghYearPath(year), buildTransactionsCsv(yearTxs), ghYearShas[year]);
-        return; // 成功
-      } catch(e) {
-        const is409 = /GitHub API (409|422)/.test(e.message);
-        if (is409 && attempt < MAX_RETRY - 1) {
-          // 少し待ってリトライ（500ms → 1000ms → 1500ms）
+      const result  = await gasPost('saveData', {
+        year,
+        rows:         yearTxs,
+        lastModified: gasLastModified[year] || 0,
+      });
+
+      if (result.error === 'conflict') {
+        if (attempt < MAX_RETRY - 1) {
           await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
           continue;
         }
-        throw e; // 最終リトライも失敗、または別エラー
+        throw new Error('GAS 競合: 最大リトライ回数を超えました');
       }
+
+      gasLastModified[year] = result.lastModified || gasLastModified[year];
+      return;
     }
   } finally {
-    unlock(); // 次の書き込みを解放
+    unlock();
   }
 }
 
-// 設定ファイルを GitHub へ書き込む（最大3回リトライ付き）
-async function writeSettingsToGitHub() {
-  const MAX_RETRY = 3;
-  for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
-    // 毎回最新 SHA を取得
-    const { sha } = await ghRead(GH_SET_PATH);
-    if (sha) ghSetSha = sha;
-    try {
-      ghSetSha = await ghWrite(GH_SET_PATH, buildSettingsCsv(), ghSetSha);
-      return; // 成功
-    } catch(e) {
-      const is409 = /GitHub API (409|422)/.test(e.message);
-      if (is409 && attempt < MAX_RETRY - 1) {
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
-        continue;
-      }
-      throw e;
-    }
-  }
+// 設定を GAS へ書き込む
+async function writeSettingsToGas() {
+  await gasPost('saveSettings', { content: buildSettingsCsv() });
 }
 
-// 設定のみ GitHub へ書き込む（デバウンス付き）
-let ghSetSyncTimer = null;
-function scheduleSyncSettingsToGitHub() {
-  if (!ghConfig.token || !ghConfig.repo) return;
-  clearTimeout(ghSetSyncTimer);
-  ghSetSyncTimer = setTimeout(async () => {
-    ghSetSyncTimer = null;
+// 設定のみ GAS へ書き込む（デバウンス付き）
+let gasSetSyncTimer = null;
+function scheduleSyncSettingsToGas() {
+  if (!gasConfig.url) return;
+  clearTimeout(gasSetSyncTimer);
+  gasSetSyncTimer = setTimeout(async () => {
+    gasSetSyncTimer = null;
     try {
-      await writeSettingsToGitHub();
+      await writeSettingsToGas();
     } catch(e) {
-      console.error('GitHub settings write error:', e);
+      console.error('GAS settings write error:', e);
     }
   }, 2000);
 }
@@ -1704,29 +1601,27 @@ document.getElementById('reload-btn').addEventListener('click', () => {
 // タブ消去・スリープ・ログアウト前に2秒タイマーを待たず即座に同期する
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'hidden') return;
-  if (!ghConfig.token || !ghConfig.repo) return;
-  // メイン同期中は競合するので何もしない（syncFromGitHub 内で書き戻し済み）
-  if (ghSyncing) return;
+  if (!gasConfig.url) return;
+  if (gasSyncing) return;
 
-  // pending な年ファイル書き込みを即時実行（タイマーをキャンセルして即時起動）
-  const pendingYears = Object.keys(ghSyncTimers).filter(y => ghSyncTimers[y] != null);
+  // pending な年データ書き込みを即時実行
+  const pendingYears = Object.keys(gasSyncTimers).filter(y => gasSyncTimers[y] != null);
   pendingYears.forEach(year => {
-    clearTimeout(ghSyncTimers[year]);
-    ghSyncTimers[year] = null;
+    clearTimeout(gasSyncTimers[year]);
+    gasSyncTimers[year] = null;
   });
   if (pendingYears.length > 0) {
-    // 直列に実行して競合を防ぐ
     pendingYears.reduce((p, year) =>
-      p.then(() => writeYearToGitHub(year)).catch(e => console.error('visibility write error:', e)),
+      p.then(() => writeYearToGas(year)).catch(e => console.error('visibility write error:', e)),
       Promise.resolve()
     );
   }
 
-  // pending な設定ファイル書き込みを即時実行
-  if (ghSetSyncTimer != null) {
-    clearTimeout(ghSetSyncTimer);
-    ghSetSyncTimer = null;
-    writeSettingsToGitHub()
+  // pending な設定書き込みを即時実行
+  if (gasSetSyncTimer != null) {
+    clearTimeout(gasSetSyncTimer);
+    gasSetSyncTimer = null;
+    writeSettingsToGas()
       .catch(e => console.error('visibility settings write error:', e));
   }
 });
@@ -1874,5 +1769,4 @@ function parseCalcAmount(str) {
 // ── 初期化 ────────────────────────────────────────
 applyNames();
 renderAll();
-initTokenExpiredAlert(); // トークン失効アラートの初期化
-syncFromGitHub();        // GitHub API で自動同期
+syncFromGas();           // GAS で自動同期

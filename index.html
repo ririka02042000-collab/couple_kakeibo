@@ -319,20 +319,18 @@
         </div>
       </div>
 
-      <!-- GitHub 連動（折りたたみ） -->
+      <!-- Google Sheets 連動（折りたたみ） -->
       <div class="form-group github-section">
         <div class="collapse-toggle" id="github-toggle">
-          <span>🐙 GitHub 連動 <span id="gh-sync-status" class="gh-sync-status gh-none">未設定</span></span>
+          <span>📊 Google Sheets 連動 <span id="gh-sync-status" class="gh-sync-status gh-none">未設定</span></span>
           <span class="collapse-arrow">▶</span>
         </div>
         <div class="collapse-body" id="github-body">
           <div class="gh-status-row" style="margin-top:8px">
-            <button id="gh-sync-now-btn" class="btn-gh-sync-now">今すぐ同期</button>
+            <button id="gas-sync-now-btn" class="btn-gh-sync-now">今すぐ同期</button>
           </div>
-          <input type="password" id="gh-token" placeholder="Personal Access Token" autocomplete="new-password">
-          <input type="text"     id="gh-repo"   placeholder="owner/repo （例: user/kakeibo）">
-          <input type="text"     id="gh-branch" placeholder="ブランチ （例: main）">
-          <p class="ratio-hint">トークンはこの端末のみに保存されます</p>
+          <input type="text" id="gas-url" placeholder="Google Apps Script の URL" autocomplete="off">
+          <p class="ratio-hint">URL はこの端末のみに保存されます</p>
         </div>
       </div>
 
