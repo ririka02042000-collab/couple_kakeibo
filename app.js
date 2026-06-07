@@ -1698,12 +1698,7 @@ document.getElementById('reload-btn').addEventListener('click', () => {
 });
 
 // ── ログアウト ────────────────────────────────────
-document.getElementById('logout-btn').addEventListener('click', () => {
-  if (confirm('ログアウトしますか？')) {
-    sessionStorage.removeItem('kakeibo_auth');
-    location.replace('login.html');
-  }
-});
+// ログアウト処理は index.html の Firebase モジュールで管理
 
 // ── バックグラウンド移行時に pending な書き込みを即時実行 ──────────
 // タブ消去・スリープ・ログアウト前に2秒タイマーを待たず即座に同期する

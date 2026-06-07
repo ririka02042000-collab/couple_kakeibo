@@ -7,14 +7,42 @@
   <link rel="icon" href="favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="favicon.png">
   <link rel="stylesheet" href="style.css">
-  <script>
-    // 未ログインならログイン画面へ
-    if (sessionStorage.getItem('kakeibo_auth') !== '1') {
-      location.replace('login.html');
-    }
+  <script type="module">
+    import { initializeApp }         from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-app.js';
+    import { getAuth, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/12.14.0/firebase-auth.js';
+
+    const firebaseConfig = {
+      apiKey:            'AIzaSyClIp0EaN20NGXDMj8IvKWrFHwKx23uuNY',
+      authDomain:        'couple-kakeibo-79f93.firebaseapp.com',
+      projectId:         'couple-kakeibo-79f93',
+      storageBucket:     'couple-kakeibo-79f93.firebasestorage.app',
+      messagingSenderId: '212097425337',
+      appId:             '1:212097425337:web:084726926342c18357a068',
+    };
+
+    const app  = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    // 未ログインならログイン画面へ、ログイン済みなら表示
+    onAuthStateChanged(auth, user => {
+      if (!user) {
+        location.replace('login.html');
+      } else {
+        document.body.style.display = '';
+      }
+    });
+
+    // ログアウト（app.js の logout-btn リスナーを上書き）
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('logout-btn').addEventListener('click', async () => {
+        if (!confirm('ログアウトしますか？')) return;
+        await signOut(auth);
+        location.replace('login.html');
+      }, { once: true });
+    });
   </script>
 </head>
-<body>
+<body style="display:none">
 
   <!-- ヘッダー -->
   <header class="app-header">
